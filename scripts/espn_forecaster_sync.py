@@ -133,6 +133,27 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
 
         return normalize_team_abbr(team_token), normalize_team_abbr(opp_token) if opp_token else None
 
+    def is_header_value(value: str | None, blocked: set[str]) -> bool:
+        if not value:
+            return False
+        normalized = " ".join(value.split()).upper()
+        return normalized in blocked
+
+    def looks_like_player_name(value: str | None) -> bool:
+        if not value:
+            return False
+        text = " ".join(value.split())
+        if not text:
+            return False
+        upper_text = text.upper()
+        if upper_text in {"TEAM", "PITCHER"}:
+            return False
+        if not re.search(r"[A-Za-z]", text):
+            return False
+        if text == upper_text and " " not in text:
+            return False
+        return True
+
     heading = soup.find(string=re.compile(r"Next\s*10\s*days", re.IGNORECASE))
     if heading:
         heading_text = " ".join(str(heading).split())
@@ -167,6 +188,14 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
             team_abbr, opponent_team_abbr = parse_matchup(matchup_text)
 
             if not pitcher_name or pitcher_name.lower() == "pitcher":
+                continue
+            if is_header_value(pitcher_name, {"TEAM", "PITCHER"}):
+                continue
+            if is_header_value(matchup_text, {"DATE", "OPP"}):
+                continue
+            if is_header_value(projection_text, {"OPP", "T FPTS"}):
+                continue
+            if not espn_player_id and not looks_like_player_name(pitcher_name):
                 continue
 
             rows.append(
