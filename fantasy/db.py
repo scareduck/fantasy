@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import mariadb
 
 from fantasy.config import Settings
@@ -308,3 +310,116 @@ def resolve_player_id(
         return int(row["player_id"]) if row else None
 
     return None
+
+
+def load_external_player_map(conn: mariadb.Connection, source_name: str) -> dict[tuple[str, str], int]:
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT source_name, external_id, player_id
+        FROM player_external_id
+        WHERE source_name = ?
+        """,
+        (source_name,),
+    )
+    mapping: dict[tuple[str, str], int] = {}
+    for row in cur.fetchall():
+        mapping[(row["source_name"], row["external_id"])] = int(row["player_id"])
+    return mapping
+
+
+def load_pitcher_name_team_maps(conn: mariadb.Connection) -> tuple[dict[tuple[str, str], list[int]], dict[tuple[str, str], list[int]]]:
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT
+            player_id,
+            full_name,
+            ascii_first_name,
+            ascii_last_name,
+            editorial_team_abbr,
+            position_type,
+            display_position
+        FROM player
+        WHERE
+            (
+                position_type = 'P'
+                OR display_position LIKE '%SP%'
+                OR display_position LIKE '%RP%'
+                OR display_position = 'P'
+            )
+            AND editorial_team_abbr IS NOT NULL
+            AND full_name IS NOT NULL
+        """,
+    )
+    full_map: dict[tuple[str, str], list[int]] = {}
+    ascii_map: dict[tuple[str, str], list[int]] = {}
+    from fantasy.espn_forecaster import normalize_ascii_name, normalize_player_name, normalize_team_abbr
+
+    for row in cur.fetchall():
+        player_id = int(row["player_id"])
+        team = normalize_team_abbr(row.get("editorial_team_abbr"))
+        full_name = normalize_player_name(row.get("full_name"))
+        if full_name and team:
+            full_map.setdefault((full_name, team), []).append(player_id)
+
+        ascii_name = normalize_ascii_name(row.get("full_name"))
+        if not ascii_name:
+            ascii_name = normalize_player_name(
+                f"{row.get('ascii_first_name') or ''} {row.get('ascii_last_name') or ''}".strip()
+            )
+        if ascii_name and team:
+            ascii_map.setdefault((ascii_name, team), []).append(player_id)
+
+    return full_map, ascii_map
+
+
+def insert_espn_forecaster_snapshot(
+    conn: mariadb.Connection,
+    *,
+    source_name: str,
+    captured_at_utc,
+    forecaster_for_date,
+    espn_player_id: str | None,
+    pitcher_name: str,
+    team_abbr: str | None,
+    opponent_team_abbr: str | None,
+    matchup_text: str | None,
+    projection_text: str | None,
+    player_id: int | None,
+    match_method: str,
+    raw_row_payload: dict,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO espn_forecaster_snapshot (
+            source_name,
+            captured_at_utc,
+            forecaster_for_date,
+            espn_player_id,
+            pitcher_name,
+            team_abbr,
+            opponent_team_abbr,
+            matchup_text,
+            projection_text,
+            player_id,
+            match_method,
+            raw_row_payload
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            source_name,
+            captured_at_utc,
+            forecaster_for_date,
+            espn_player_id,
+            pitcher_name,
+            team_abbr,
+            opponent_team_abbr,
+            matchup_text,
+            projection_text,
+            player_id,
+            match_method,
+            json.dumps(raw_row_payload, ensure_ascii=False),
+        ),
+    )
