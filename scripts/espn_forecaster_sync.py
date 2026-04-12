@@ -115,29 +115,21 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
         if not matchup_text:
             return None, None
         cleaned = " ".join(matchup_text.split()).upper()
-        if "OFF" in cleaned:
-            return None, "OFF"
 
-        token_matches = re.findall(r"@?[A-Z]{2,3}", cleaned)
-        token_matches = [token for token in token_matches if token not in {"VS", "AT"}]
-        if not token_matches:
+        raw_tokens = re.findall(r"@?[A-Z]{2,3}|OFF", cleaned)
+        if not raw_tokens:
             return None, None
 
-        team_token = token_matches[0].lstrip("@")
-        opp_token: str | None = None
+        has_off = "OFF" in raw_tokens
+        team_tokens = [token for token in raw_tokens if token != "OFF"]
+        if not team_tokens:
+            return None, "OFF" if has_off else None
 
-        for token in token_matches[1:]:
-            if token.startswith("@"):
-                opp_token = token.lstrip("@")
-                break
-            if token.lstrip("@") != team_token:
-                opp_token = token.lstrip("@")
-                break
+        team_token = team_tokens[0].lstrip("@")
+        opp_token = team_tokens[1].lstrip("@") if len(team_tokens) > 1 else None
 
-        if not opp_token:
-            opp_match = re.search(r"\b(?:vs\.?|at)\s+([A-Z]{2,3})\b", cleaned, flags=re.IGNORECASE)
-            if opp_match:
-                opp_token = opp_match.group(1)
+        if not opp_token and has_off:
+            opp_token = "OFF"
 
         return normalize_team_abbr(team_token), normalize_team_abbr(opp_token) if opp_token else None
 
