@@ -5,8 +5,8 @@ import argparse
 from dataclasses import dataclass
 from typing import Iterable
 
-from fantasy_baseball.config import load_settings
-from fantasy_baseball.db import connect
+from fantasy.config import load_settings
+from fantasy.db import connect
 
 
 @dataclass

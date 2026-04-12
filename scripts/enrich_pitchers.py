@@ -6,9 +6,9 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
-from fantasy_baseball.config import load_settings
-from fantasy_baseball.db import connect, resolve_player_id
-from fantasy_baseball.utils import parse_bool
+from fantasy.config import load_settings
+from fantasy.db import connect, resolve_player_id
+from fantasy.utils import parse_bool
 
 
 

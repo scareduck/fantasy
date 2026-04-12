@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import mariadb
 
-from fantasy_baseball.config import Settings
+from fantasy.config import Settings
 
 
 

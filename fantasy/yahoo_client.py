@@ -5,9 +5,9 @@ from typing import Iterable
 
 import requests
 
-from fantasy_baseball.config import Settings
-from fantasy_baseball.yahoo_auth import YahooAuth
-from fantasy_baseball.yahoo_xml import parse_game, parse_leagues, parse_league_settings, parse_players, parse_xml
+from fantasy.config import Settings
+from fantasy.yahoo_auth import YahooAuth
+from fantasy.yahoo_xml import parse_game, parse_leagues, parse_league_settings, parse_players, parse_xml
 
 BASE_URL = "https://fantasysports.yahooapis.com/fantasy/v2"
 

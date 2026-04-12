@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 
 import requests
 
-from fantasy_baseball.config import Settings
+from fantasy.config import Settings
 
 AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
 TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"

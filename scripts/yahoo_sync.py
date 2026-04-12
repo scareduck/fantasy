@@ -5,8 +5,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from fantasy_baseball.config import load_settings
-from fantasy_baseball.db import (
+from fantasy.config import load_settings
+from fantasy.db import (
     complete_sync_run,
     connect,
     create_sync_run,
@@ -15,8 +15,8 @@ from fantasy_baseball.db import (
     upsert_league_stat_categories,
     upsert_player,
 )
-from fantasy_baseball.utils import format_snapshot_timestamp, utc_now, write_csv
-from fantasy_baseball.yahoo_client import YahooFantasyClient
+from fantasy.utils import format_snapshot_timestamp, utc_now, write_csv
+from fantasy.yahoo_client import YahooFantasyClient
 
 
 def parse_args() -> argparse.Namespace:

@@ -37,20 +37,20 @@ Local Python + MariaDB starter project for pulling Yahoo Fantasy Baseball waiver
 - `scripts/yahoo_sync.py` - Yahoo ingest + CSV snapshot
 - `scripts/enrich_pitchers.py` - import probable starters / projections / notes from CSV
 - `scripts/rank_streamers.py` - category-based ranking from the DB
-- `fantasy_baseball/` - shared library code
+- `fantasy/` - shared library code
 
 ## Setup
 
 ### 1) Create the database
 
 ```sql
-CREATE DATABASE fantasy_baseball CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE fantasy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 Then load the schema:
 
 ```bash
-mysql -u root -p fantasy_baseball < schema.sql
+mysql -u root -p fantasy < schema.sql
 ```
 
 ### 2) Create a Yahoo developer app
