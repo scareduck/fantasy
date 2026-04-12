@@ -152,12 +152,14 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
         pitcher_names, espn_ids = split_pitcher_chunks(cells[0])
         matchup_chunks = split_cell_chunks(cells[1])
         projection_chunks = split_cell_chunks(cells[2])
+        if not pitcher_names:
+            continue
         row_count = max(len(pitcher_names), len(matchup_chunks), len(projection_chunks))
         if row_count == 0:
             continue
 
         for idx in range(row_count):
-            pitcher_name = pitcher_names[idx] if idx < len(pitcher_names) else pitcher_names[-1]
+            pitcher_name = pitcher_names[idx] if idx < len(pitcher_names) else None
             espn_player_id = espn_ids[idx] if idx < len(espn_ids) else None
             matchup_text = matchup_chunks[idx] if idx < len(matchup_chunks) else None
             projection_text = projection_chunks[idx] if idx < len(projection_chunks) else None
