@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -43,129 +43,63 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
     rows: list[dict] = []
     forecaster_for_date = None
 
-    heading = soup.find(string=re.compile(r"(Next\s*10\s*days|Pitching\s*Matchups)", re.IGNORECASE))
+    heading = soup.find(string=re.compile(r"Next\s*10\s*days", re.IGNORECASE))
     if heading:
         heading_text = " ".join(str(heading).split())
         date_match = re.search(r"([A-Za-z]{3,9}\.?\s+\d{1,2}(?:\s*-\s*[A-Za-z]{3,9}\.?\s+\d{1,2})?)", heading_text)
         if date_match:
             forecaster_for_date = date_match.group(1)
 
-    def is_matchup_token(text: str) -> bool:
-        token = text.strip().upper()
-        return bool(re.fullmatch(r"(?:@[A-Z]{2,3}|[A-Z]{2,3}|OFF)", token))
-
-    def extract_team_code(img_src: str | None) -> str | None:
-        if not img_src:
-            return None
-        team_match = re.search(r"/teamlogos/mlb/\d+/([a-z]{2,3})\.(?:png|svg)", img_src, re.IGNORECASE)
-        if not team_match:
-            return None
-        return normalize_team_abbr(team_match.group(1).upper())
-
-    def split_cell_entries(cell) -> list[dict]:
-        entries: list[dict] = []
-        chunk: list = []
-        for node in cell.children:
-            if getattr(node, "name", None) == "br":
-                entries.append(_entry_from_chunk(chunk))
-                chunk = []
-            else:
-                chunk.append(node)
-        if chunk:
-            entries.append(_entry_from_chunk(chunk))
-        return entries
-
-    def _entry_from_chunk(chunk: list) -> dict:
-        text_parts: list[str] = []
-        player_id = None
-        for part in chunk:
-            part_text = ""
-            if hasattr(part, "get_text"):
-                part_text = part.get_text(" ", strip=True)
-                if player_id is None:
-                    anchor = part if getattr(part, "name", None) == "a" else part.find("a", href=True)
-                    if anchor:
-                        match = re.search(r"/player/_/id/(\d+)", anchor.get("href", ""))
-                        if match:
-                            player_id = match.group(1)
-            else:
-                part_text = str(part).strip()
-            if part_text:
-                text_parts.append(part_text)
-        return {"text": " ".join(text_parts).strip(), "espn_player_id": player_id}
-
-    def is_fpts_token(text: str) -> bool:
-        return bool(re.fullmatch(r"\d+(?:\.\d+)?", text.strip()))
-
-    def cell_score(cell) -> tuple[int, int, int]:
-        entries = split_cell_entries(cell)
-        matchup_count = sum(1 for item in entries if is_matchup_token(item["text"]))
-        pitcher_count = sum(1 for item in entries if item.get("espn_player_id"))
-        fpts_count = sum(1 for item in entries if is_fpts_token(item["text"]))
-        return matchup_count, pitcher_count, fpts_count
-
-    team_logo_imgs = soup.select("img[src*='/teamlogos/mlb/']")
-    for logo in team_logo_imgs:
-        team_abbr = extract_team_code(logo.get("src"))
-        if not team_abbr:
-            continue
-
-        block = logo
-        while block.parent is not None:
-            parent = block.parent
-            if len(parent.select("img[src*='/teamlogos/mlb/']")) > 1:
-                break
-            block = parent
-
-        cells = block.find_all(["td", "th"])
+    for tr in soup.select("table tr"):
+        cells = tr.find_all(["td", "th"])
         if len(cells) < 3:
             continue
 
-        scored_cells = [(cell, *cell_score(cell)) for cell in cells]
-        opponent_cell = max(scored_cells, key=lambda item: item[1])[0]
-        pitcher_cell = max(scored_cells, key=lambda item: item[2])[0]
-        fpts_cell = max(scored_cells, key=lambda item: item[3])[0]
-
-        opponents = [item["text"].upper() for item in split_cell_entries(opponent_cell) if is_matchup_token(item["text"])]
-        pitcher_entries = split_cell_entries(pitcher_cell)
-        fpts_entries = [item["text"] for item in split_cell_entries(fpts_cell) if is_fpts_token(item["text"])]
-
-        if len(opponents) < 5:
+        texts = [" ".join(cell.get_text(" ", strip=True).split()) for cell in cells]
+        if not texts or "pitcher" in texts[0].lower() and "matchup" in " ".join(texts).lower():
             continue
 
-        max_rows = max(len(opponents), len(pitcher_entries))
-        for idx in range(max_rows):
-            matchup_token = opponents[idx] if idx < len(opponents) else ""
-            if matchup_token == "OFF":
-                continue
+        raw_text = " | ".join(texts)
+        if not re.search(r"\b(vs\.?|at)\b", raw_text, re.IGNORECASE):
+            continue
 
-            pitcher_name = None
-            espn_player_id = None
-            if idx < len(pitcher_entries):
-                pitcher_name = pitcher_entries[idx]["text"] or None
-                espn_player_id = pitcher_entries[idx]["espn_player_id"]
-            if not pitcher_name:
-                continue
+        link = tr.find("a", href=re.compile(r"/id/\d+"))
+        espn_player_id = None
+        if link and link.get("href"):
+            m = re.search(r"/id/(\d+)", link["href"])
+            if m:
+                espn_player_id = m.group(1)
 
-            if matchup_token.startswith("@"):
-                opponent_team_abbr = normalize_team_abbr(matchup_token[1:])
-            else:
-                opponent_team_abbr = normalize_team_abbr(matchup_token)
+        pitcher_name = texts[0]
+        if link and link.get_text(strip=True):
+            pitcher_name = link.get_text(" ", strip=True)
 
-            projection_text = fpts_entries[idx] if idx < len(fpts_entries) else None
+        team_abbr = None
+        team_match = re.search(r"\b([A-Z]{2,3})\b", texts[1]) if len(texts) > 1 else None
+        if team_match:
+            team_abbr = normalize_team_abbr(team_match.group(1))
 
-            rows.append(
-                {
-                    "source_name": SOURCE_NAME,
-                    "espn_player_id": espn_player_id,
-                    "pitcher_name": pitcher_name,
-                    "team_abbr": team_abbr,
-                    "opponent_team_abbr": opponent_team_abbr,
-                    "matchup_text": matchup_token,
-                    "projection_text": projection_text,
-                    "raw_cells": [" ".join(text.split()) for text in block.stripped_strings],
-                }
-            )
+        matchup_text = texts[1] if len(texts) > 1 else None
+        projection_text = texts[2] if len(texts) > 2 else None
+
+        opponent_team_abbr = None
+        if matchup_text:
+            opp_match = re.search(r"\b(?:vs\.?|at)\s+([A-Z]{2,3})\b", matchup_text)
+            if opp_match:
+                opponent_team_abbr = normalize_team_abbr(opp_match.group(1))
+
+        rows.append(
+            {
+                "source_name": SOURCE_NAME,
+                "espn_player_id": espn_player_id,
+                "pitcher_name": pitcher_name,
+                "team_abbr": team_abbr,
+                "opponent_team_abbr": opponent_team_abbr,
+                "matchup_text": matchup_text,
+                "projection_text": projection_text,
+                "raw_cells": texts,
+            }
+        )
 
     return rows, forecaster_for_date
 
@@ -192,40 +126,25 @@ def write_rows_csv(path: Path, rows: list[dict]) -> None:
 
 def main() -> int:
     args = parse_args()
+    settings = load_db_sync_settings()
     captured_at = utc_now()
-    local_timezone = os.getenv("LOCAL_TIMEZONE", "America/Chicago").strip() or "America/Chicago"
-    ts = format_snapshot_timestamp(captured_at, local_timezone)
-    snapshot_dir = Path(os.getenv("SNAPSHOT_DIR", "snapshots")).expanduser()
+    ts = format_snapshot_timestamp(captured_at, settings.local_timezone)
 
     html = fetch_page(args.url)
     rows, forecaster_for_date = parse_espn_forecaster_rows(html)
     if not rows:
         raise SystemExit("No forecaster rows were parsed from the ESPN page.")
 
-    conn = None
-    explicit_map: dict[tuple[str, str], int] = {}
-    full_map: dict[tuple[str, str], list[int]] = {}
-    ascii_map: dict[tuple[str, str], list[int]] = {}
-    if not args.dry_run:
-        settings = load_db_sync_settings()
-        snapshot_dir = settings.snapshot_dir
-        conn = connect(settings)
+    conn = connect(settings)
+    try:
         explicit_map = load_external_player_map(conn, SOURCE_NAME)
         full_map, ascii_map = load_pitcher_name_team_maps(conn)
 
-    try:
         snapshot_rows: list[dict] = []
         unresolved_rows: list[dict] = []
 
         for row in rows:
-            if args.dry_run:
-                player_id = None
-                match_method = "dry_run_unresolved"
-            else:
-                match = correlate_forecaster_row(row, explicit_map, full_map, ascii_map)
-                player_id = match.player_id
-                match_method = match.method
-
+            match = correlate_forecaster_row(row, explicit_map, full_map, ascii_map)
             snapshot_row = {
                 "captured_at_utc": captured_at.isoformat(),
                 "forecaster_for_date": forecaster_for_date,
@@ -235,16 +154,15 @@ def main() -> int:
                 "opponent_team_abbr": row.get("opponent_team_abbr"),
                 "matchup_text": row.get("matchup_text"),
                 "projection_text": row.get("projection_text"),
-                "player_id": player_id,
-                "match_method": match_method,
+                "player_id": match.player_id,
+                "match_method": match.method,
             }
             snapshot_rows.append(snapshot_row)
 
-            if player_id is None:
+            if match.player_id is None:
                 unresolved_rows.append(snapshot_row)
 
             if not args.dry_run:
-                assert conn is not None
                 insert_espn_forecaster_snapshot(
                     conn,
                     source_name=SOURCE_NAME,
@@ -256,18 +174,17 @@ def main() -> int:
                     opponent_team_abbr=row.get("opponent_team_abbr"),
                     matchup_text=row.get("matchup_text"),
                     projection_text=row.get("projection_text"),
-                    player_id=player_id,
-                    match_method=match_method,
+                    player_id=match.player_id,
+                    match_method=match.method,
                     raw_row_payload=row,
                 )
 
-        snapshots_path = snapshot_dir / f"espn_forecaster_{ts}.csv"
-        unresolved_path = snapshot_dir / f"espn_forecaster_unresolved_{ts}.csv"
+        snapshots_path = settings.snapshot_dir / f"espn_forecaster_{ts}.csv"
+        unresolved_path = settings.snapshot_dir / f"espn_forecaster_unresolved_{ts}.csv"
         write_rows_csv(snapshots_path, snapshot_rows)
         write_rows_csv(unresolved_path, unresolved_rows)
 
         if not args.dry_run:
-            assert conn is not None
             conn.commit()
 
         print(f"Parsed {len(rows)} ESPN rows")
@@ -276,12 +193,10 @@ def main() -> int:
         print(f"Wrote snapshot CSV: {snapshots_path}")
         print(f"Wrote unresolved CSV: {unresolved_path}")
     except Exception:
-        if conn is not None:
-            conn.rollback()
+        conn.rollback()
         raise
     finally:
-        if conn is not None:
-            conn.close()
+        conn.close()
 
     return 0
 
