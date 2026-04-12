@@ -63,6 +63,23 @@ CREATE TABLE IF NOT EXISTS player (
     KEY idx_player_team_name (editorial_team_abbr, full_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS player_external_id (
+    player_external_id_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    player_id BIGINT UNSIGNED NOT NULL,
+    source_name VARCHAR(64) NOT NULL,
+    external_id VARCHAR(128) NOT NULL,
+    external_label VARCHAR(255) NULL,
+    team_abbr VARCHAR(16) NULL,
+    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    PRIMARY KEY (player_external_id_id),
+    UNIQUE KEY uq_external_source_id (source_name, external_id),
+    KEY idx_external_player_source (player_id, source_name),
+    CONSTRAINT fk_player_external_id_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS sync_run (
     sync_run_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     league_id BIGINT UNSIGNED NOT NULL,
@@ -155,6 +172,31 @@ CREATE TABLE IF NOT EXISTS projection (
     CONSTRAINT fk_projection_player
         FOREIGN KEY (player_id) REFERENCES player (player_id)
         ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS espn_forecaster_snapshot (
+    espn_forecaster_snapshot_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    source_name VARCHAR(64) NOT NULL DEFAULT 'espn_forecaster',
+    captured_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    forecaster_for_date VARCHAR(64) NULL,
+    espn_player_id VARCHAR(64) NULL,
+    pitcher_name VARCHAR(255) NOT NULL,
+    team_abbr VARCHAR(16) NULL,
+    opponent_team_abbr VARCHAR(16) NULL,
+    matchup_text VARCHAR(255) NULL,
+    projection_text VARCHAR(255) NULL,
+    player_id BIGINT UNSIGNED NULL,
+    match_method VARCHAR(64) NOT NULL DEFAULT 'unresolved',
+    raw_row_payload JSON NOT NULL,
+    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    PRIMARY KEY (espn_forecaster_snapshot_id),
+    KEY idx_espn_forecaster_captured (captured_at_utc),
+    KEY idx_espn_forecaster_player (player_id),
+    KEY idx_espn_forecaster_espn_player (espn_player_id),
+    CONSTRAINT fk_espn_forecaster_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS stream_note (
