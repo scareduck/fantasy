@@ -79,180 +79,93 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
     rows: list[dict] = []
     forecaster_for_date = None
 
-    def split_cell_chunks(cell) -> list[str]:
-        chunks: list[str] = []
-        current: list[str] = []
-        for child in cell.children:
-            if getattr(child, "name", None) == "br":
-                text = " ".join(" ".join(current).split())
-                if text:
-                    chunks.append(text)
-                current = []
-                continue
-            text = child.get_text(" ", strip=True) if hasattr(child, "get_text") else str(child).strip()
-            if text:
-                current.append(text)
+    # Extract date range from headings (e.g. "April 13-19" or "April 13 - April 19")
+    for tag in soup.find_all(re.compile(r"h[1-5]")):
+        text = tag.get_text(" ", strip=True)
+        m = re.search(
+            r"([A-Za-z]{3,9}\.?\s+\d{1,2}\s*[-\u2013]\s*(?:[A-Za-z]{3,9}\.?\s+)?\d{1,2})",
+            text,
+        )
+        if m:
+            forecaster_for_date = m.group(1)
+            break
 
-        text = " ".join(" ".join(current).split())
-        if text:
-            chunks.append(text)
+    # Find the pitcher rankings table by its header row
+    pitcher_table = None
+    for table in soup.select("table"):
+        header_row = table.select_one("tr")
+        if not header_row:
+            continue
+        headers = [c.get_text(strip=True).upper() for c in header_row.find_all(["th", "td"])]
+        if "PITCHER" in headers and "TEAM" in headers:
+            pitcher_table = table
+            break
 
-        if not chunks:
-            fallback = " ".join(cell.get_text(" ", strip=True).split())
-            if fallback:
-                chunks.append(fallback)
-        return chunks
+    if pitcher_table is None:
+        return rows, forecaster_for_date
 
-    def split_pitcher_chunks(cell) -> tuple[list[str], list[str | None]]:
-        names: list[str] = []
-        external_ids: list[str | None] = []
-        current_name: list[str] = []
-        current_id: str | None = None
+    header_row = pitcher_table.select_one("tr")
+    headers = [c.get_text(strip=True).upper() for c in header_row.find_all(["th", "td"])]
+    try:
+        pitcher_col = headers.index("PITCHER")
+        team_col = headers.index("TEAM")
+    except ValueError:
+        return rows, forecaster_for_date
 
-        for child in cell.children:
-            if getattr(child, "name", None) == "br":
-                text = " ".join(" ".join(current_name).split())
-                if text:
-                    names.append(text)
-                    external_ids.append(current_id)
-                current_name = []
-                current_id = None
-                continue
+    start_cols = [i for i, h in enumerate(headers) if "START" in h]
+    start1_col = start_cols[0] if len(start_cols) > 0 else None
+    start2_col = start_cols[1] if len(start_cols) > 1 else None
 
-            if getattr(child, "name", None) == "a":
-                link_text = child.get_text(" ", strip=True)
-                if link_text:
-                    current_name.append(link_text)
-                href = child.get("href", "")
-                m = re.search(r"/id/(\d+)", href)
-                if m:
-                    current_id = m.group(1)
-            else:
-                text = child.get_text(" ", strip=True) if hasattr(child, "get_text") else str(child).strip()
-                if text:
-                    current_name.append(text)
-
-        text = " ".join(" ".join(current_name).split())
-        if text:
-            names.append(text)
-            external_ids.append(current_id)
-
-        if not names:
-            fallback = " ".join(cell.get_text(" ", strip=True).split())
-            if fallback:
-                names.append(fallback)
-                external_ids.append(None)
-
-        return names, external_ids
-
-    def parse_matchup(matchup_text: str | None) -> tuple[str | None, str | None]:
-        if not matchup_text:
-            return None, None
-        cleaned = " ".join(matchup_text.split()).upper()
-
-        raw_tokens = re.findall(r"@?[A-Z]{2,3}|OFF", cleaned)
-        if not raw_tokens:
-            return None, None
-
-        has_off = "OFF" in raw_tokens
-        team_tokens = [token for token in raw_tokens if token != "OFF"]
-        if not team_tokens:
-            return None, "OFF" if has_off else None
-
-        team_token = team_tokens[0].lstrip("@")
-        opp_token = team_tokens[1].lstrip("@") if len(team_tokens) > 1 else None
-
-        if not opp_token and has_off:
-            opp_token = "OFF"
-
-        return normalize_team_abbr(team_token), normalize_team_abbr(opp_token) if opp_token else None
-
-    def is_header_value(value: str | None, blocked: set[str]) -> bool:
-        if not value:
-            return False
-        normalized = " ".join(value.split()).upper()
-        return normalized in blocked
-
-    def looks_like_player_name(value: str | None) -> bool:
-        if not value:
-            return False
-        text = " ".join(value.split())
-        if not text:
-            return False
-        upper_text = text.upper()
-        if upper_text in {"TEAM", "PITCHER"}:
-            return False
-        if not re.search(r"[A-Za-z]", text):
-            return False
-        if text == upper_text and " " not in text:
-            return False
-        return True
-
-    heading = soup.find(string=re.compile(r"Next\s*10\s*days", re.IGNORECASE))
-    if heading:
-        heading_text = " ".join(str(heading).split())
-        date_match = re.search(r"([A-Za-z]{3,9}\.?\s+\d{1,2}(?:\s*-\s*[A-Za-z]{3,9}\.?\s+\d{1,2})?)", heading_text)
-        if date_match:
-            forecaster_for_date = date_match.group(1)
-
-    for tr in soup.select("table tr"):
+    for tr in pitcher_table.select("tr")[1:]:
         cells = tr.find_all(["td", "th"])
-        if len(cells) < 3:
+        if len(cells) <= pitcher_col:
             continue
 
-        texts = [" ".join(cell.get_text(" ", strip=True).split()) for cell in cells]
-        upper_texts = [t.upper() for t in texts]
-
-        # Skip obvious header/label rows before any deeper parsing.
-        header_tokens = {"TEAM", "DATE", "OPP", "PITCHER", "T", "FPTS", "T FPTS"}
-        joined = " ".join(upper_texts)
-        if all(t in header_tokens for t in upper_texts if t):
-            continue
-        if "PITCHER" in upper_texts and "DATE" in upper_texts and "OPP" in upper_texts:
-            continue
-        if not texts or ("pitcher" in texts[0].lower() and "matchup" in " ".join(texts).lower()):
+        pitcher_cell = cells[pitcher_col]
+        pitcher_name = " ".join(pitcher_cell.get_text(" ", strip=True).split())
+        if not pitcher_name or pitcher_name.upper() == "PITCHER":
             continue
 
-        pitcher_names, espn_ids = split_pitcher_chunks(cells[0])
-        matchup_chunks = split_cell_chunks(cells[1])
-        projection_chunks = split_cell_chunks(cells[2])
-        if not pitcher_names:
-            continue
-        row_count = max(len(pitcher_names), len(matchup_chunks), len(projection_chunks))
-        if row_count == 0:
-            continue
+        anchor = pitcher_cell.find("a", href=True)
+        espn_player_id = None
+        if anchor:
+            m = re.search(r"/id/(\d+)", anchor["href"])
+            if m:
+                espn_player_id = m.group(1)
 
-        for idx in range(row_count):
-            pitcher_name = pitcher_names[idx] if idx < len(pitcher_names) else None
-            espn_player_id = espn_ids[idx] if idx < len(espn_ids) else None
-            matchup_text = matchup_chunks[idx] if idx < len(matchup_chunks) else None
-            projection_text = projection_chunks[idx] if idx < len(projection_chunks) else None
+        team_text = cells[team_col].get_text(strip=True) if len(cells) > team_col else None
+        team_abbr = normalize_team_abbr(team_text) if team_text else None
 
-            team_abbr, opponent_team_abbr = parse_matchup(matchup_text)
+        matchup_text = (
+            " ".join(cells[start1_col].get_text(" ", strip=True).split())
+            if start1_col is not None and len(cells) > start1_col
+            else None
+        )
+        projection_text = (
+            " ".join(cells[start2_col].get_text(" ", strip=True).split())
+            if start2_col is not None and len(cells) > start2_col
+            else None
+        )
 
-            if not pitcher_name or pitcher_name.lower() == "pitcher":
-                continue
-            if is_header_value(pitcher_name, {"TEAM", "PITCHER"}):
-                continue
-            if is_header_value(matchup_text, {"DATE", "OPP"}):
-                continue
-            if is_header_value(projection_text, {"OPP", "T FPTS"}):
-                continue
-            if not espn_player_id and not looks_like_player_name(pitcher_name):
-                continue
+        # Opponent is the team abbreviation after the hyphen in "Tue 4/14-@SD (King)"
+        opponent_team_abbr = None
+        if matchup_text:
+            opp_m = re.search(r"-@?([A-Z]{2,4})\b", matchup_text.upper())
+            if opp_m:
+                opponent_team_abbr = normalize_team_abbr(opp_m.group(1))
 
-            rows.append(
-                {
-                    "source_name": SOURCE_NAME,
-                    "espn_player_id": espn_player_id,
-                    "pitcher_name": pitcher_name,
-                    "team_abbr": team_abbr,
-                    "opponent_team_abbr": opponent_team_abbr,
-                    "matchup_text": matchup_text,
-                    "projection_text": projection_text,
-                    "raw_cells": texts,
-                }
-            )
+        rows.append(
+            {
+                "source_name": SOURCE_NAME,
+                "espn_player_id": espn_player_id,
+                "pitcher_name": pitcher_name,
+                "team_abbr": team_abbr,
+                "opponent_team_abbr": opponent_team_abbr,
+                "matchup_text": matchup_text,
+                "projection_text": projection_text,
+                "raw_cells": [" ".join(c.get_text(" ", strip=True).split()) for c in cells],
+            }
+        )
 
     return rows, forecaster_for_date
 
