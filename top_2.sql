@@ -10,7 +10,7 @@
 SELECT
     p.full_name,
     p.editorial_team_abbr                   AS team,
-    pas.availability_status as avail,
+#    pas.availability_status as avail,
 #    pas.percent_owned,
     efs.forecaster_for_date                 AS week,
     efs.total_fpts,
@@ -31,5 +31,6 @@ JOIN (
 ) efs
     ON efs.player_id = pas.player_id
 WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM sync_run)
+  and pas.availability_status='fa'
 ORDER BY pas.availability_status, efs.total_fpts DESC
 limit 10;

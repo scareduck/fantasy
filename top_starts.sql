@@ -10,7 +10,7 @@
 SELECT
     p.full_name,
     p.editorial_team_abbr                   AS team,
-    pas.availability_status as avail,
+#    pas.availability_status as avail,
 #    pas.percent_owned,
     efs.forecaster_for_date                 AS week,
     CAST(efs.projection_text AS DECIMAL(6,2)) as fpts,
