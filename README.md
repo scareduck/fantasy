@@ -35,22 +35,23 @@ Local Python + MariaDB starter project for pulling Yahoo Fantasy Baseball waiver
 - `.env.example` - environment variables
 - `requirements.txt` - Python dependencies
 - `scripts/yahoo_sync.py` - Yahoo ingest + CSV snapshot
+- `scripts/espn_forecaster_sync.py` - ESPN forecaster ingest + Yahoo player correlation
 - `scripts/enrich_pitchers.py` - import probable starters / projections / notes from CSV
 - `scripts/rank_streamers.py` - category-based ranking from the DB
-- `fantasy_baseball/` - shared library code
+- `fantasy/` - shared library code
 
 ## Setup
 
 ### 1) Create the database
 
 ```sql
-CREATE DATABASE fantasy_baseball CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE fantasy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 Then load the schema:
 
 ```bash
-mysql -u root -p fantasy_baseball < schema.sql
+mysql -u root -p fantasy < schema.sql
 ```
 
 ### 2) Create a Yahoo developer app
@@ -109,6 +110,42 @@ python scripts/yahoo_sync.py --dry-run
 ```
 
 ## Enrichment imports
+
+## ESPN forecaster sync
+
+This project includes a first-class ESPN forecaster ingestion script for probable starting pitcher rows (next 10 days). It stores the raw row payload in MariaDB, attempts to match each row to existing Yahoo players, and writes both full and unresolved CSV snapshots.
+
+Matching order:
+
+1. `player_external_id` explicit mapping (`source_name=espn_forecaster`)
+2. normalized `full_name + editorial_team_abbr`
+3. ASCII-normalized name + normalized team abbreviation
+4. unresolved / ambiguous output for manual mapping
+
+Run:
+
+```bash
+python scripts/espn_forecaster_sync.py
+```
+
+Optional:
+
+```bash
+python scripts/espn_forecaster_sync.py --dry-run
+python scripts/espn_forecaster_sync.py --url "https://www.espn.com/fantasy/baseball/story/_/id/31165100/fantasy-baseball-forecaster-probable-starting-pitcher-projections-matchups-daily-weekly-leagues"
+```
+
+Outputs:
+
+- `snapshots/espn_forecaster_<timestamp>.csv`
+- `snapshots/espn_forecaster_unresolved_<timestamp>.csv`
+- database rows in `espn_forecaster_snapshot` with `raw_row_payload` JSON
+
+Manual mapping workflow:
+
+- Insert rows into `player_external_id` for unresolved ESPN `espn_player_id` values.
+- Re-run `scripts/espn_forecaster_sync.py`.
+- Rows that now resolve via explicit mapping will be linked to `player.player_id`.
 
 ### Probable starters CSV
 
@@ -222,6 +259,6 @@ That table is optional, but useful if you later want to tie an add/drop to:
 4. Refine the ranking formulas based on how your league actually plays
 5. Optionally add a report script for “best streamers by date” or “wire state at time of move”
 
-## Notes on ESPN projections
+## Notes on ESPN data
 
-This starter does **not** scrape ESPN. Instead, it gives you a clean place to ingest ESPN projected FPTS from a CSV or other adapter later. That keeps the core Yahoo pipeline stable and leaves the fragile enrichment layer separate.
+The ESPN forecaster ingest is intentionally isolated from the Yahoo availability sync flow. Yahoo sync continues to operate as the core ingestion path, while ESPN rows are stored as separate snapshots for correlation and auditability.

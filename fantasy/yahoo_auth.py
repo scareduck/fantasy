@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import secrets
 import time
 import webbrowser
 from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
-from fantasy_baseball.config import Settings
+from fantasy.config import Settings
 
 AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
 TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
@@ -79,14 +82,19 @@ class YahooAuth:
 
     def _interactive_authorization_code_flow(self) -> YahooToken:
         state = secrets.token_urlsafe(24)
-        nonce = secrets.token_urlsafe(24)
+        code_verifier = secrets.token_urlsafe(64)
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode("ascii")).digest()
+        ).rstrip(b"=").decode("ascii")
+
         params = {
             "client_id": self.settings.yahoo_client_id,
             "redirect_uri": self.settings.yahoo_redirect_uri,
             "response_type": "code",
             "scope": self.settings.yahoo_scope,
             "state": state,
-            "nonce": nonce,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         }
         auth_url = f"{AUTH_URL}?{urlencode(params)}"
 
@@ -98,7 +106,11 @@ class YahooAuth:
         except Exception:
             pass
 
-        if self.settings.yahoo_redirect_uri == "oob":
+        parsed = urlparse(self.settings.yahoo_redirect_uri)
+        if parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"):
+            port = parsed.port or 80
+            code = self._wait_for_local_callback(port, state)
+        elif self.settings.yahoo_redirect_uri == "oob":
             code = input("Paste the Yahoo authorization code: ").strip()
         else:
             redirect_value = input(
@@ -110,17 +122,47 @@ class YahooAuth:
             TOKEN_URL,
             data={
                 "grant_type": "authorization_code",
+                "client_id": self.settings.yahoo_client_id,
                 "redirect_uri": self.settings.yahoo_redirect_uri,
                 "code": code,
+                "code_verifier": code_verifier,
             },
-            auth=(self.settings.yahoo_client_id, self.settings.yahoo_client_secret),
             timeout=30,
         )
-        response.raise_for_status()
+        if not response.ok:
+            raise RuntimeError(f"Token exchange failed ({response.status_code}): {response.text}")
         payload = response.json()
         payload["created_at"] = time.time()
         payload["expires_at"] = payload["created_at"] + int(payload.get("expires_in", 3600)) - 60
         return YahooToken.from_payload(payload)
+
+    def _wait_for_local_callback(self, port: int, expected_state: str) -> str:
+        captured: dict = {}
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                qs = parse_qs(urlparse(self.path).query)
+                captured["code"] = qs.get("code", [None])[0]
+                captured["state"] = qs.get("state", [None])[0]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<html><body><p>Authorization complete. You may close this tab.</p></body></html>")
+
+            def log_message(self, *args):
+                pass  # suppress request logging
+
+        server = HTTPServer(("127.0.0.1", port), _Handler)
+        print(f"Waiting for Yahoo callback on port {port} ...")
+        server.handle_request()
+        server.server_close()
+
+        if captured.get("state") != expected_state:
+            raise RuntimeError("OAuth state mismatch — possible CSRF. Re-run to try again.")
+        code = captured.get("code")
+        if not code:
+            raise RuntimeError("No authorization code received in callback.")
+        return code
 
     def _refresh_token(self, refresh_token: str) -> YahooToken:
         response = self.session.post(

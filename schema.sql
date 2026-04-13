@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS league (
     league_url VARCHAR(512) NULL,
     last_synced_at_utc DATETIME NULL,
     raw_settings_xml LONGTEXT NULL,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (league_id),
     UNIQUE KEY uq_league_yahoo_key (yahoo_league_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS league_stat_category (
     sort_order TINYINT NULL,
     is_enabled TINYINT(1) NOT NULL DEFAULT 1,
     is_focus_category TINYINT(1) NOT NULL DEFAULT 0,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (league_stat_category_id),
     UNIQUE KEY uq_league_stat (league_id, stat_id),
     CONSTRAINT fk_league_stat_category_league
@@ -55,26 +55,43 @@ CREATE TABLE IF NOT EXISTS player (
     yahoo_status VARCHAR(64) NULL,
     yahoo_status_full VARCHAR(255) NULL,
     raw_player_xml LONGTEXT NULL,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (player_id),
     UNIQUE KEY uq_player_yahoo_key (yahoo_player_key),
     KEY idx_player_name (full_name),
     KEY idx_player_team_name (editorial_team_abbr, full_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS player_external_id (
+    player_external_id_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    player_id BIGINT UNSIGNED NOT NULL,
+    source_name VARCHAR(64) NOT NULL,
+    external_id VARCHAR(128) NOT NULL,
+    external_label VARCHAR(255) NULL,
+    team_abbr VARCHAR(16) NULL,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (player_external_id_id),
+    UNIQUE KEY uq_external_source_id (source_name, external_id),
+    KEY idx_external_player_source (player_id, source_name),
+    CONSTRAINT fk_player_external_id_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS sync_run (
     sync_run_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     league_id BIGINT UNSIGNED NOT NULL,
     source_name VARCHAR(32) NOT NULL DEFAULT 'yahoo',
-    started_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    started_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at_utc DATETIME NULL,
     requested_position VARCHAR(16) NOT NULL DEFAULT 'P',
     requested_statuses VARCHAR(64) NOT NULL,
     snapshot_file VARCHAR(512) NULL,
     row_count INT NOT NULL DEFAULT 0,
     notes TEXT NULL,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (sync_run_id),
     KEY idx_sync_run_league_started (league_id, started_at_utc),
     CONSTRAINT fk_sync_run_league
@@ -93,7 +110,7 @@ CREATE TABLE IF NOT EXISTS player_availability_snapshot (
     source_page_count INT NOT NULL DEFAULT 0,
     percent_owned DECIMAL(5,2) NULL,
     raw_player_xml LONGTEXT NULL,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (snapshot_id),
     UNIQUE KEY uq_snapshot_sync_player_status (sync_run_id, player_id, availability_status),
     KEY idx_snapshot_league_captured (league_id, captured_at_utc),
@@ -120,9 +137,9 @@ CREATE TABLE IF NOT EXISTS probable_start (
     role_code VARCHAR(32) NULL,
     game_time_local DATETIME NULL,
     notes TEXT NULL,
-    captured_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    captured_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (probable_start_id),
     UNIQUE KEY uq_probable_start (player_id, source_name, start_date),
     KEY idx_probable_start_date (start_date),
@@ -146,15 +163,40 @@ CREATE TABLE IF NOT EXISTS projection (
     opponent_team_abbr VARCHAR(16) NULL,
     park VARCHAR(128) NULL,
     notes TEXT NULL,
-    captured_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    captured_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (projection_id),
     UNIQUE KEY uq_projection (player_id, source_name, projection_date),
     KEY idx_projection_date (projection_date),
     CONSTRAINT fk_projection_player
         FOREIGN KEY (player_id) REFERENCES player (player_id)
         ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS espn_forecaster_snapshot (
+    espn_forecaster_snapshot_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    source_name VARCHAR(64) NOT NULL DEFAULT 'espn_forecaster',
+    captured_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    forecaster_for_date VARCHAR(64) NULL,
+    espn_player_id VARCHAR(64) NULL,
+    pitcher_name VARCHAR(255) NOT NULL,
+    team_abbr VARCHAR(16) NULL,
+    opponent_team_abbr VARCHAR(16) NULL,
+    matchup_text VARCHAR(255) NULL,
+    projection_text VARCHAR(255) NULL,
+    player_id BIGINT UNSIGNED NULL,
+    match_method VARCHAR(64) NOT NULL DEFAULT 'unresolved',
+    raw_row_payload JSON NOT NULL,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (espn_forecaster_snapshot_id),
+    KEY idx_espn_forecaster_captured (captured_at_utc),
+    KEY idx_espn_forecaster_player (player_id),
+    KEY idx_espn_forecaster_espn_player (espn_player_id),
+    CONSTRAINT fk_espn_forecaster_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS stream_note (
@@ -164,8 +206,8 @@ CREATE TABLE IF NOT EXISTS stream_note (
     note_text TEXT NULL,
     source_name VARCHAR(64) NOT NULL DEFAULT 'manual',
     is_active TINYINT(1) NOT NULL DEFAULT 1,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
-    updated_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP() ON UPDATE UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (stream_note_id),
     KEY idx_stream_note_player (player_id),
     KEY idx_stream_note_tag_active (tag, is_active),
@@ -177,7 +219,7 @@ CREATE TABLE IF NOT EXISTS stream_note (
 CREATE TABLE IF NOT EXISTS roster_move (
     roster_move_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     league_id BIGINT UNSIGNED NOT NULL,
-    move_ts_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    move_ts_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     action_type VARCHAR(32) NOT NULL,
     added_player_id BIGINT UNSIGNED NULL,
     dropped_player_id BIGINT UNSIGNED NULL,
@@ -185,7 +227,7 @@ CREATE TABLE IF NOT EXISTS roster_move (
     sync_run_id BIGINT UNSIGNED NULL,
     snapshot_file VARCHAR(512) NULL,
     note_text TEXT NULL,
-    created_at_utc DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (roster_move_id),
     KEY idx_roster_move_league_ts (league_id, move_ts_utc),
     CONSTRAINT fk_roster_move_league
