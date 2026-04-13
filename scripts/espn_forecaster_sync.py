@@ -22,14 +22,48 @@ from fantasy.db import (
 from fantasy.espn_forecaster import correlate_forecaster_row, normalize_team_abbr
 from fantasy.utils import format_snapshot_timestamp, utc_now
 
-ESPN_URL = "https://www.espn.com/fantasy/baseball/story/_/id/31165100/fantasy-baseball-forecaster-probable-starting-pitcher-projections-matchups-daily-weekly-leagues"
+ESPN_FALLBACK_URL = "https://www.espn.com/fantasy/baseball/story/_/id/31165100/fantasy-baseball-forecaster-probable-starting-pitcher-projections-matchups-daily-weekly-leagues"
+ESPN_INDEX_URL = "https://www.espn.com/fantasy/baseball/"
 SOURCE_NAME = "espn_forecaster"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+_FORECASTER_PATTERNS = [
+    re.compile(r"forecaster.*pitcher projections.*next \d+ days", re.I),
+    re.compile(r"forecaster.*starting pitcher.*week \d+", re.I),
+    re.compile(r"fantasy baseball forecaster.*week \d+", re.I),
+    re.compile(r"forecaster.*pitcher projections", re.I),
+]
+
+
+def discover_forecaster_url() -> str:
+    """
+    Scrape the ESPN fantasy baseball index page for the current forecaster link.
+    Falls back to ESPN_FALLBACK_URL if discovery fails.
+    No hardcoded story IDs — matches on link text patterns only.
+    """
+    try:
+        resp = requests.get(ESPN_INDEX_URL, timeout=15, headers={"User-Agent": USER_AGENT})
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for anchor in soup.find_all("a", href=True):
+            text = anchor.get_text(strip=True)
+            href = anchor["href"]
+            if "espn.com/fantasy/baseball/story" not in href:
+                if not href.startswith("http"):
+                    href = "https://www.espn.com" + href
+                if "espn.com/fantasy/baseball/story" not in href:
+                    continue
+            for pat in _FORECASTER_PATTERNS:
+                if pat.search(text):
+                    return href
+    except Exception:
+        pass
+    return ESPN_FALLBACK_URL
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync ESPN forecaster pitching rows into MariaDB.")
-    parser.add_argument("--url", default=ESPN_URL, help="Forecaster URL to fetch")
+    parser.add_argument("--url", default=None, help="Forecaster URL to fetch (default: auto-discover)")
     parser.add_argument("--dry-run", action="store_true", help="Parse and write CSV outputs without DB inserts")
     return parser.parse_args()
 
@@ -167,6 +201,15 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
             continue
 
         texts = [" ".join(cell.get_text(" ", strip=True).split()) for cell in cells]
+        upper_texts = [t.upper() for t in texts]
+
+        # Skip obvious header/label rows before any deeper parsing.
+        header_tokens = {"TEAM", "DATE", "OPP", "PITCHER", "T", "FPTS", "T FPTS"}
+        joined = " ".join(upper_texts)
+        if all(t in header_tokens for t in upper_texts if t):
+            continue
+        if "PITCHER" in upper_texts and "DATE" in upper_texts and "OPP" in upper_texts:
+            continue
         if not texts or ("pitcher" in texts[0].lower() and "matchup" in " ".join(texts).lower()):
             continue
 
@@ -246,7 +289,7 @@ def main() -> int:
     captured_at = utc_now()
     ts = format_snapshot_timestamp(captured_at, settings.local_timezone)
 
-    html = fetch_page(args.url)
+    html = fetch_page(args.url or discover_forecaster_url())
     rows, forecaster_for_date = parse_espn_forecaster_rows(html)
     if not rows:
         raise SystemExit("No forecaster rows were parsed from the ESPN page.")
