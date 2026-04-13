@@ -27,35 +27,21 @@ ESPN_INDEX_URL = "https://www.espn.com/fantasy/baseball/"
 SOURCE_NAME = "espn_forecaster"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
-_FORECASTER_PATTERNS = [
-    re.compile(r"forecaster.*pitcher projections.*next \d+ days", re.I),
-    re.compile(r"forecaster.*starting pitcher.*week \d+", re.I),
-    re.compile(r"fantasy baseball forecaster.*week \d+", re.I),
-    re.compile(r"forecaster.*pitcher projections", re.I),
-]
-
-
 def discover_forecaster_url() -> str:
     """
-    Scrape the ESPN fantasy baseball index page for the current forecaster link.
-    Falls back to ESPN_FALLBACK_URL if discovery fails.
-    No hardcoded story IDs — matches on link text patterns only.
+    Try the known evergreen forecaster URL first (has FPTS data).
+    Falls back to ESPN_FALLBACK_URL if the primary is unreachable.
     """
     try:
-        resp = requests.get(ESPN_INDEX_URL, timeout=15, headers={"User-Agent": USER_AGENT})
+        resp = requests.get(ESPN_FALLBACK_URL, timeout=15, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-        for anchor in soup.find_all("a", href=True):
-            text = anchor.get_text(strip=True)
-            href = anchor["href"]
-            if "espn.com/fantasy/baseball/story" not in href:
-                if not href.startswith("http"):
-                    href = "https://www.espn.com" + href
-                if "espn.com/fantasy/baseball/story" not in href:
-                    continue
-            for pat in _FORECASTER_PATTERNS:
-                if pat.search(text):
-                    return href
+        for table in soup.select("table"):
+            header = table.select_one("tr")
+            if header:
+                headers = [c.get_text(strip=True).upper() for c in header.find_all(["th", "td"])]
+                if "FPTS" in headers:
+                    return ESPN_FALLBACK_URL
     except Exception:
         pass
     return ESPN_FALLBACK_URL
@@ -74,12 +60,67 @@ def fetch_page(url: str) -> str:
     return response.text
 
 
+def _br_chunks(cell) -> list[str]:
+    """Split a table cell's content by <br> tags, returning stripped text per slot."""
+    chunks: list[str] = []
+    current: list[str] = []
+    container = cell.find("div") or cell
+    for child in container.children:
+        if getattr(child, "name", None) == "br":
+            chunks.append(" ".join(current).strip())
+            current = []
+        elif hasattr(child, "get_text"):
+            text = child.get_text(" ", strip=True)
+            if text:
+                current.append(text)
+        else:
+            text = str(child).strip()
+            if text:
+                current.append(text)
+    if current:
+        chunks.append(" ".join(current).strip())
+    return chunks
+
+
+def _pitcher_br_chunks(cell) -> list[tuple[str, str | None]]:
+    """Split pitcher cell by <br> tags, returning (name, espn_id) per slot."""
+    pairs: list[tuple[str, str | None]] = []
+    current_name: list[str] = []
+    current_id: str | None = None
+    container = cell.find("div") or cell
+    for child in container.children:
+        if getattr(child, "name", None) == "br":
+            pairs.append((" ".join(current_name).strip(), current_id))
+            current_name = []
+            current_id = None
+        elif getattr(child, "name", None) == "a":
+            href = child.get("href", "")
+            m = re.search(r"/id/(\d+)", href)
+            if m:
+                current_id = m.group(1)
+            current_name.append(child.get_text(" ", strip=True))
+        elif hasattr(child, "get_text"):
+            text = child.get_text(" ", strip=True)
+            if text:
+                current_name.append(text)
+        else:
+            text = str(child).strip()
+            if text:
+                current_name.append(text)
+    pairs.append((" ".join(current_name).strip(), current_id))
+    return pairs
+
+
 def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
+    """
+    Parse the ESPN forecaster page (TEAM/DATE/OPP/PITCHER/T/FPTS format).
+    Each table row is a team block; cells are BR-separated, one entry per game day.
+    """
     soup = BeautifulSoup(html, "html.parser")
     rows: list[dict] = []
     forecaster_for_date = None
 
-    # Extract date range from headings (e.g. "April 13-19" or "April 13 - April 19")
+    # Extract date range from headings
     for tag in soup.find_all(re.compile(r"h[1-5]")):
         text = tag.get_text(" ", strip=True)
         m = re.search(
@@ -90,82 +131,78 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
             forecaster_for_date = m.group(1)
             break
 
-    # Find the pitcher rankings table by its header row
-    pitcher_table = None
+    # Find the FPTS forecaster table
+    fpts_table = None
     for table in soup.select("table"):
-        header_row = table.select_one("tr")
-        if not header_row:
+        header = table.select_one("tr")
+        if not header:
             continue
-        headers = [c.get_text(strip=True).upper() for c in header_row.find_all(["th", "td"])]
-        if "PITCHER" in headers and "TEAM" in headers:
-            pitcher_table = table
+        headers = [c.get_text(strip=True).upper() for c in header.find_all(["th", "td"])]
+        if "FPTS" in headers and "PITCHER" in headers:
+            fpts_table = table
             break
 
-    if pitcher_table is None:
+    if fpts_table is None:
         return rows, forecaster_for_date
 
-    header_row = pitcher_table.select_one("tr")
+    header_row = fpts_table.select_one("tr")
     headers = [c.get_text(strip=True).upper() for c in header_row.find_all(["th", "td"])]
     try:
+        date_col = headers.index("DATE")
+        opp_col = headers.index("OPP")
         pitcher_col = headers.index("PITCHER")
-        team_col = headers.index("TEAM")
+        fpts_col = headers.index("FPTS")
     except ValueError:
         return rows, forecaster_for_date
 
-    start_cols = [i for i, h in enumerate(headers) if "START" in h]
-    start1_col = start_cols[0] if len(start_cols) > 0 else None
-    start2_col = start_cols[1] if len(start_cols) > 1 else None
-
-    for tr in pitcher_table.select("tr")[1:]:
+    for tr in fpts_table.select("tr")[1:]:
         cells = tr.find_all(["td", "th"])
-        if len(cells) <= pitcher_col:
+        if len(cells) <= fpts_col:
             continue
 
-        pitcher_cell = cells[pitcher_col]
-        pitcher_name = " ".join(pitcher_cell.get_text(" ", strip=True).split())
-        if not pitcher_name or pitcher_name.upper() == "PITCHER":
-            continue
-
-        anchor = pitcher_cell.find("a", href=True)
-        espn_player_id = None
-        if anchor:
-            m = re.search(r"/id/(\d+)", anchor["href"])
+        # Team from logo image src: .../mlb/500/ari.png -> ARI
+        team_abbr = None
+        img = cells[0].find("img")
+        if img:
+            m = re.search(r"/mlb/500/(\w+)\.png", img.get("src", ""))
             if m:
-                espn_player_id = m.group(1)
+                team_abbr = normalize_team_abbr(m.group(1).upper())
+        if not team_abbr:
+            continue
 
-        team_text = cells[team_col].get_text(strip=True) if len(cells) > team_col else None
-        team_abbr = normalize_team_abbr(team_text) if team_text else None
+        pitcher_pairs = _pitcher_br_chunks(cells[pitcher_col])
+        date_chunks = _br_chunks(cells[date_col])
+        opp_chunks = _br_chunks(cells[opp_col])
+        fpts_chunks = _br_chunks(cells[fpts_col])
 
-        matchup_text = (
-            " ".join(cells[start1_col].get_text(" ", strip=True).split())
-            if start1_col is not None and len(cells) > start1_col
-            else None
-        )
-        projection_text = (
-            " ".join(cells[start2_col].get_text(" ", strip=True).split())
-            if start2_col is not None and len(cells) > start2_col
-            else None
-        )
+        for idx, (pitcher_name, espn_player_id) in enumerate(pitcher_pairs):
+            if not pitcher_name or pitcher_name.upper() == "TBD":
+                continue
 
-        # Opponent is the team abbreviation after the hyphen in "Tue 4/14-@SD (King)"
-        opponent_team_abbr = None
-        if matchup_text:
-            opp_m = re.search(r"-@?([A-Z]{2,4})\b", matchup_text.upper())
-            if opp_m:
-                opponent_team_abbr = normalize_team_abbr(opp_m.group(1))
+            raw_date = date_chunks[idx] if idx < len(date_chunks) else ""
+            opp_text = opp_chunks[idx] if idx < len(opp_chunks) else ""
+            fpts_text = fpts_chunks[idx] if idx < len(fpts_chunks) else ""
 
-        rows.append(
-            {
-                "source_name": SOURCE_NAME,
-                "espn_player_id": espn_player_id,
-                "pitcher_name": pitcher_name,
-                "team_abbr": team_abbr,
-                "opponent_team_abbr": opponent_team_abbr,
-                "matchup_text": matchup_text,
-                "projection_text": projection_text,
-                "raw_cells": [" ".join(c.get_text(" ", strip=True).split()) for c in cells],
-            }
-        )
+            if not opp_text or opp_text.upper() == "OFF":
+                opponent_team_abbr = None
+                matchup_text = None
+            else:
+                opponent_team_abbr = normalize_team_abbr(opp_text.lstrip("@"))
+                date_str = raw_date.replace(",", "").strip()
+                matchup_text = f"{date_str}-{opp_text}" if date_str else opp_text
+
+            rows.append(
+                {
+                    "source_name": SOURCE_NAME,
+                    "espn_player_id": espn_player_id,
+                    "pitcher_name": pitcher_name,
+                    "team_abbr": team_abbr,
+                    "opponent_team_abbr": opponent_team_abbr,
+                    "matchup_text": matchup_text,
+                    "projection_text": fpts_text or None,
+                    "raw_cells": [" ".join(c.get_text(" ", strip=True).split()) for c in cells],
+                }
+            )
 
     return rows, forecaster_for_date
 
@@ -194,7 +231,7 @@ def main() -> int:
     args = parse_args()
     if args.dry_run:
         settings = SimpleNamespace(
-            snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", "snapshots")).expanduser(),
+            snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", Path(__file__).parent.parent / "snapshots")),
             local_timezone=os.getenv("LOCAL_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
         )
     else:

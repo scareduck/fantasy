@@ -36,4 +36,4 @@ JOIN (
     ON efs.player_id = pas.player_id
     AND efs.rn = 1
 WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM sync_run)
-ORDER BY pas.availability_status, pas.percent_owned DESC;
+ORDER BY pas.availability_status, pas.percent_owned DESC\G

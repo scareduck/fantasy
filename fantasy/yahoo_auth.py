@@ -169,10 +169,10 @@ class YahooAuth:
             TOKEN_URL,
             data={
                 "grant_type": "refresh_token",
+                "client_id": self.settings.yahoo_client_id,
                 "redirect_uri": self.settings.yahoo_redirect_uri,
                 "refresh_token": refresh_token,
             },
-            auth=(self.settings.yahoo_client_id, self.settings.yahoo_client_secret),
             timeout=30,
         )
         response.raise_for_status()

@@ -37,7 +37,8 @@ def normalize_player_name(name: str | None) -> str:
     if not name:
         return ""
     normalized = re.sub(r"\s+", " ", name).strip().lower()
-    normalized = re.sub(r"[,'’.-]", " ", normalized)
+    normalized = re.sub(r"\s*\([^)]*\)\s*$", "", normalized).strip()  # strip trailing (Pitcher) etc.
+    normalized = re.sub(r"[,’’.-]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     normalized = SUFFIX_RE.sub("", normalized).strip()
     return normalized
