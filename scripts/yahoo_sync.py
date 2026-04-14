@@ -11,6 +11,7 @@ from fantasy.db import (
     connect,
     create_sync_run,
     insert_availability_snapshot,
+    insert_roster_snapshot,
     upsert_league,
     upsert_league_stat_categories,
     upsert_player,
@@ -25,6 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--statuses", default="FA,W", help="Comma-separated availability statuses to pull. Default: FA,W")
     parser.add_argument("--position", default="P", help="League-context Yahoo position filter. Default: P")
     parser.add_argument("--page-size", type=int, default=25, help="Yahoo pagination count. Default: 25")
+    parser.add_argument("--my-roster", action="store_true", help="Sync the current user's team roster into roster_snapshot.")
+    parser.add_argument("--all-rosters", action="store_true", help="Sync every team's roster into roster_snapshot.")
     parser.add_argument("--dry-run", action="store_true", help="Fetch and write CSV but do not write to MariaDB.")
     return parser.parse_args()
 
@@ -68,7 +71,7 @@ def main() -> int:
 
     print(f"Game:   {game['game_key']} ({game.get('season')})")
     print(f"League: {league['league_key']} - {league.get('name')}")
-    print(f"Pull:   statuses={','.join(statuses)} position={args.position} page_size={args.page_size}")
+    print(f"Pull:   statuses={','.join(statuses)} position={args.position} page_size={args.page_size} my_roster={args.my_roster}")
 
     csv_rows: list[dict] = []
     db_rows: list[tuple[dict, str, int, int]] = []
@@ -170,6 +173,39 @@ def main() -> int:
             )
 
         complete_sync_run(conn, sync_run_id, len(db_rows))
+
+        if args.my_roster or args.all_rosters:
+            teams = client.get_league_teams(league["league_key"])
+            if args.all_rosters:
+                teams_to_sync = teams
+            else:
+                my_team = next((t for t in teams if t["is_owned_by_current_login"]), None)
+                if my_team is None:
+                    print("WARNING: Could not find a team owned by the current login; skipping roster sync.")
+                    teams_to_sync = []
+                else:
+                    teams_to_sync = [my_team]
+
+            total_roster_rows = 0
+            for team in teams_to_sync:
+                print(f"Roster: syncing team {team['team_key']} ({team['team_name']})")
+                roster = client.get_team_roster(team["team_key"])
+                for player in roster:
+                    player_id = upsert_player(conn, player)
+                    insert_roster_snapshot(
+                        conn,
+                        league_id=league_id,
+                        team_key=team["team_key"],
+                        team_name=team["team_name"],
+                        player_id=player_id,
+                        yahoo_player_key=player["yahoo_player_key"],
+                        selected_position=player.get("selected_position"),
+                        captured_at_utc=run_ts.replace(tzinfo=None),
+                    )
+                total_roster_rows += len(roster)
+            if teams_to_sync:
+                print(f"Inserted {total_roster_rows} roster snapshot rows across {len(teams_to_sync)} team(s)")
+
         conn.commit()
         print(f"Committed sync_run_id={sync_run_id} rows={len(db_rows)}")
     except Exception:

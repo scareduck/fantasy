@@ -7,7 +7,7 @@ import requests
 
 from fantasy.config import Settings
 from fantasy.yahoo_auth import YahooAuth
-from fantasy.yahoo_xml import parse_game, parse_leagues, parse_league_settings, parse_players, parse_xml
+from fantasy.yahoo_xml import parse_game, parse_leagues, parse_league_settings, parse_players, parse_roster_players, parse_teams, parse_xml
 
 BASE_URL = "https://fantasysports.yahooapis.com/fantasy/v2"
 
@@ -63,3 +63,11 @@ class YahooFantasyClient:
             f"league/{league_key}/players;status={status};position={position};start={start};count={count}"
         )
         return parse_players(parse_xml(xml.body))
+
+    def get_league_teams(self, league_key: str) -> list[dict]:
+        xml = self.get_xml(f"league/{league_key}/teams")
+        return parse_teams(parse_xml(xml.body))
+
+    def get_team_roster(self, team_key: str) -> list[dict]:
+        xml = self.get_xml(f"team/{team_key}/roster/players")
+        return parse_roster_players(parse_xml(xml.body))

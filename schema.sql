@@ -216,6 +216,27 @@ CREATE TABLE IF NOT EXISTS stream_note (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS roster_snapshot (
+    roster_snapshot_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    league_id BIGINT UNSIGNED NOT NULL,
+    team_key VARCHAR(64) NOT NULL,
+    team_name VARCHAR(255) NULL,
+    player_id BIGINT UNSIGNED NULL,
+    yahoo_player_key VARCHAR(64) NOT NULL,
+    selected_position VARCHAR(16) NULL,
+    captured_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (roster_snapshot_id),
+    KEY idx_roster_snapshot_league (league_id, captured_at_utc),
+    KEY idx_roster_snapshot_player (player_id),
+    CONSTRAINT fk_roster_snapshot_league
+        FOREIGN KEY (league_id) REFERENCES league (league_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_roster_snapshot_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS roster_move (
     roster_move_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     league_id BIGINT UNSIGNED NOT NULL,

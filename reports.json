@@ -1,0 +1,14 @@
+[
+  {
+    "name": "rob",
+    "email": "rlm@scareduck.com",
+    "sql": "my_starts.sql",
+    "title": "Your Starts This Week"
+  },
+  {
+    "name": "helen",
+    "email": "helen@doubledogmusic.com",
+    "sql": "helens_starts.sql",
+    "title": "Tinker Evers\u2019 Chance \u2014 Starts This Week"
+  }
+]

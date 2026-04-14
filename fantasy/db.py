@@ -374,6 +374,42 @@ def load_pitcher_name_team_maps(conn: mariadb.Connection) -> tuple[dict[tuple[st
     return full_map, ascii_map
 
 
+def insert_roster_snapshot(
+    conn: mariadb.Connection,
+    *,
+    league_id: int,
+    team_key: str,
+    team_name: str | None,
+    player_id: int | None,
+    yahoo_player_key: str,
+    selected_position: str | None,
+    captured_at_utc,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO roster_snapshot (
+            league_id,
+            team_key,
+            team_name,
+            player_id,
+            yahoo_player_key,
+            selected_position,
+            captured_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            league_id,
+            team_key,
+            team_name,
+            player_id,
+            yahoo_player_key,
+            selected_position,
+            captured_at_utc,
+        ),
+    )
+
+
 def insert_espn_forecaster_snapshot(
     conn: mariadb.Connection,
     *,

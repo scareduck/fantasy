@@ -153,3 +153,62 @@ def _parse_percent_owned(player: ET.Element) -> float | None:
         return float(value)
     except ValueError:
         return None
+
+
+def parse_teams(root: ET.Element) -> list[dict]:
+    """Parse teams from a league/teams response. Returns list of team dicts."""
+    teams: list[dict] = []
+    for team in root.findall(".//y:team", NS):
+        team_key = find_text(team, "y:team_key")
+        if not team_key:
+            continue
+        teams.append(
+            {
+                "team_key": team_key,
+                "team_id": find_text(team, "y:team_id"),
+                "team_name": find_text(team, "y:name"),
+                "is_owned_by_current_login": find_text(team, "y:is_owned_by_current_login") == "1",
+            }
+        )
+    return teams
+
+
+def parse_roster_players(root: ET.Element) -> list[dict]:
+    """Parse players from a team/roster response, including selected_position."""
+    players: list[dict] = []
+    for player in root.findall(".//y:player", NS):
+        player_key = find_text(player, "y:player_key")
+        if not player_key:
+            continue
+        eligible_positions = [
+            pos.text.strip()
+            for pos in player.findall("y:eligible_positions/y:position", NS)
+            if pos.text and pos.text.strip()
+        ]
+        selected_position = find_text(player, "y:selected_position/y:position")
+        players.append(
+            {
+                "yahoo_player_key": player_key,
+                "yahoo_player_id": int(find_text(player, "y:player_id") or 0) or None,
+                "editorial_player_key": find_text(player, "y:editorial_player_key"),
+                "full_name": find_text(player, "y:name/y:full") or "UNKNOWN",
+                "first_name": find_text(player, "y:name/y:first"),
+                "last_name": find_text(player, "y:name/y:last"),
+                "ascii_first_name": find_text(player, "y:name/y:ascii_first"),
+                "ascii_last_name": find_text(player, "y:name/y:ascii_last"),
+                "editorial_team_key": find_text(player, "y:editorial_team_key"),
+                "editorial_team_full_name": find_text(player, "y:editorial_team_full_name"),
+                "editorial_team_abbr": find_text(player, "y:editorial_team_abbr"),
+                "uniform_number": find_text(player, "y:uniform_number"),
+                "display_position": find_text(player, "y:display_position"),
+                "position_type": find_text(player, "y:position_type"),
+                "eligible_positions": eligible_positions,
+                "eligible_positions_json": json.dumps(eligible_positions),
+                "yahoo_status": find_text(player, "y:status"),
+                "yahoo_status_full": find_text(player, "y:status_full"),
+                "percent_owned": _parse_percent_owned(player),
+                "raw_player_xml": element_to_xml(player),
+                "selected_position": selected_position,
+            }
+        )
+    return players
