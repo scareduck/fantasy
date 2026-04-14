@@ -1,8 +1,8 @@
 [Unit]
-Description=Email Fantasy Baseball pitcher start reports every Monday at 7:00 AM
+Description=Email Fantasy Baseball pitcher start reports every Sunday at 6:00 AM
 
 [Timer]
-OnCalendar=Mon *-*-* 07:00:00
+OnCalendar=Sun *-*-* 06:00:00
 AccuracySec=5m
 Persistent=true
 

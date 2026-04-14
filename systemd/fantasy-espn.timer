@@ -1,8 +1,8 @@
 [Unit]
-Description=Run Fantasy Baseball ESPN forecaster sync daily at 6:30 AM
+Description=Run Fantasy Baseball ESPN forecaster sync every Sunday at 5:30 AM
 
 [Timer]
-OnCalendar=*-*-* 06:30:00
+OnCalendar=Sun *-*-* 05:30:00
 AccuracySec=5m
 Persistent=true
 
