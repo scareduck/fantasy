@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 
 from fantasy.config import load_settings
+from fantasy.notify import send_alert
 from fantasy.yahoo_auth import InteractiveAuthRequired, YahooAuth
 
 
@@ -30,11 +31,23 @@ def main() -> int:
         print(f"{now} OK: token refreshed, new expires_at={expires}")
         return 0
     except InteractiveAuthRequired:
-        print(f"{now} ERROR: interactive auth required — refresh token has expired")
+        msg = "Yahoo refresh token has expired. Run `fantasy-sync` interactively to re-authenticate."
+        print(f"{now} ERROR: {msg}", file=sys.stderr)
+        _alert(f"⚠️ Fantasy Baseball: Yahoo re-authentication required", msg)
         return 1
     except Exception as e:
-        print(f"{now} ERROR: refresh failed — {e}")
+        msg = f"Yahoo token refresh failed: {e}"
+        print(f"{now} ERROR: {msg}", file=sys.stderr)
+        _alert("⚠️ Fantasy Baseball: token refresh error", msg)
         return 1
+
+
+def _alert(subject: str, body: str) -> None:
+    try:
+        send_alert(subject, body)
+        print(f"Alert email sent.", file=sys.stderr)
+    except Exception as mail_err:
+        print(f"Could not send alert email: {mail_err}", file=sys.stderr)
 
 
 if __name__ == "__main__":
