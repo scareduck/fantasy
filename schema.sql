@@ -264,3 +264,51 @@ CREATE TABLE IF NOT EXISTS roster_move (
         FOREIGN KEY (sync_run_id) REFERENCES sync_run (sync_run_id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS batter_season_stats (
+    batter_season_stats_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    sync_run_id BIGINT UNSIGNED NOT NULL,
+    player_id BIGINT UNSIGNED NOT NULL,
+    captured_at_utc DATETIME NOT NULL,
+    ab INT NULL,
+    r INT NULL,
+    h INT NULL,
+    hr INT NULL,
+    rbi INT NULL,
+    sb INT NULL,
+    bb INT NULL,
+    obp DECIMAL(5,3) NULL,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (batter_season_stats_id),
+    UNIQUE KEY uq_batter_stats (sync_run_id, player_id),
+    KEY idx_batter_stats_player (player_id),
+    CONSTRAINT fk_batter_stats_sync_run
+        FOREIGN KEY (sync_run_id) REFERENCES sync_run (sync_run_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_batter_stats_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS pitcher_season_stats (
+    pitcher_season_stats_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    sync_run_id BIGINT UNSIGNED NOT NULL,
+    player_id BIGINT UNSIGNED NOT NULL,
+    captured_at_utc DATETIME NOT NULL,
+    ip DECIMAL(6,2) NULL,
+    w INT NULL,
+    k INT NULL,
+    era DECIMAL(6,3) NULL,
+    whip DECIMAL(6,3) NULL,
+    sv_holds DECIMAL(6,2) NULL,
+    created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (pitcher_season_stats_id),
+    UNIQUE KEY uq_pitcher_stats (sync_run_id, player_id),
+    KEY idx_pitcher_stats_player (player_id),
+    CONSTRAINT fk_pitcher_stats_sync_run
+        FOREIGN KEY (sync_run_id) REFERENCES sync_run (sync_run_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_pitcher_stats_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

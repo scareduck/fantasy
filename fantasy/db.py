@@ -410,6 +410,136 @@ def insert_roster_snapshot(
     )
 
 
+def load_stat_id_map(conn: mariadb.Connection, league_id: int) -> dict[str, int]:
+    """Return a mapping of display_name -> stat_id for the given league."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT stat_id, display_name FROM league_stat_category WHERE league_id = ? AND display_name IS NOT NULL",
+        (league_id,),
+    )
+    return {row["display_name"]: row["stat_id"] for row in cur.fetchall()}
+
+
+def upsert_batter_season_stats(
+    conn: mariadb.Connection,
+    *,
+    sync_run_id: int,
+    player_id: int,
+    captured_at_utc,
+    stat_map: dict[str, int],
+    stats: dict[int, str | None],
+) -> None:
+    """Insert or replace batter season stats for one player in one sync run.
+
+    stat_map: display_name -> stat_id (from load_stat_id_map)
+    stats: stat_id -> raw string value (from get_league_players_stats_page)
+    """
+    def raw(name: str) -> str | None:
+        sid = stat_map.get(name)
+        return stats.get(sid) if sid is not None else None
+
+    def vf(name: str) -> float | None:
+        s = raw(name)
+        if s is None:
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+
+    def vi(name: str) -> int | None:
+        val = vf(name)
+        return int(val) if val is not None else None
+
+    # H/AB comes back as "45/167" — split to get both hits and at-bats.
+    h_ab = raw("H/AB")
+    if h_ab and "/" in h_ab:
+        parts = h_ab.split("/", 1)
+        try:
+            h_val: int | None = int(parts[0])
+        except ValueError:
+            h_val = None
+        try:
+            ab_val: int | None = int(parts[1])
+        except ValueError:
+            ab_val = None
+    else:
+        h_val = None
+        ab_val = None
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO batter_season_stats (
+            sync_run_id, player_id, captured_at_utc,
+            ab, r, h, hr, rbi, sb, bb, obp
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            captured_at_utc = VALUES(captured_at_utc),
+            ab  = VALUES(ab),
+            r   = VALUES(r),
+            h   = VALUES(h),
+            hr  = VALUES(hr),
+            rbi = VALUES(rbi),
+            sb  = VALUES(sb),
+            bb  = VALUES(bb),
+            obp = VALUES(obp)
+        """,
+        (
+            sync_run_id, player_id, captured_at_utc,
+            ab_val, vi("R"), h_val, vi("HR"), vi("RBI"), vi("SB"), vi("BB"),
+            vf("OBP"),
+        ),
+    )
+
+
+def upsert_pitcher_season_stats(
+    conn: mariadb.Connection,
+    *,
+    sync_run_id: int,
+    player_id: int,
+    captured_at_utc,
+    stat_map: dict[str, int],
+    stats: dict[int, str | None],
+) -> None:
+    """Insert or replace pitcher season stats for one player in one sync run."""
+    def vf(name: str) -> float | None:
+        sid = stat_map.get(name)
+        s = stats.get(sid) if sid is not None else None
+        if s is None:
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+
+    def vi(name: str) -> int | None:
+        val = vf(name)
+        return int(val) if val is not None else None
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO pitcher_season_stats (
+            sync_run_id, player_id, captured_at_utc,
+            ip, w, k, era, whip, sv_holds
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            captured_at_utc = VALUES(captured_at_utc),
+            ip       = VALUES(ip),
+            w        = VALUES(w),
+            k        = VALUES(k),
+            era      = VALUES(era),
+            whip     = VALUES(whip),
+            sv_holds = VALUES(sv_holds)
+        """,
+        (
+            sync_run_id, player_id, captured_at_utc,
+            vf("IP"), vi("W"), vi("K"), vf("ERA"), vf("WHIP"), vf("SV+H"),
+        ),
+    )
+
+
 def insert_espn_forecaster_snapshot(
     conn: mariadb.Connection,
     *,
