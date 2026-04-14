@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import secrets
+import sys
 import time
 import webbrowser
 from dataclasses import dataclass
@@ -15,6 +16,10 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import requests
 
 from fantasy.config import Settings
+
+
+class InteractiveAuthRequired(RuntimeError):
+    """Raised when a new Yahoo OAuth token is needed but no TTY is available."""
 
 AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
 TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
@@ -64,6 +69,11 @@ class YahooAuth:
             refreshed = self._refresh_token(token.refresh_token)
             self._save_token(refreshed)
             return refreshed
+        if not sys.stdin.isatty():
+            raise InteractiveAuthRequired(
+                "Yahoo token is missing or expired and the refresh token is unavailable. "
+                "Run `fantasy-sync` interactively to re-authenticate."
+            )
         bootstrapped = self._interactive_authorization_code_flow()
         self._save_token(bootstrapped)
         return bootstrapped
