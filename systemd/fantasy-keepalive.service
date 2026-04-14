@@ -1,0 +1,12 @@
+[Unit]
+Description=Yahoo OAuth token keepalive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlm/src/fantasy
+Environment=PATH=/home/rlm/.local/bin:/usr/local/bin:/usr/bin:/usr/sbin
+ExecStart=fantasy-keepalive
+StandardOutput=journal
+StandardError=journal
