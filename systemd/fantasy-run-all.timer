@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Fantasy Baseball pipeline every Sunday at 5:00 AM
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+AccuracySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

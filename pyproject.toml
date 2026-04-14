@@ -17,6 +17,7 @@ dependencies = [
 fantasy-sync    = "scripts.yahoo_sync:main"
 fantasy-espn    = "scripts.espn_forecaster_sync:main"
 fantasy-report  = "scripts.pitcher_report:main"
+fantasy-run-all = "scripts.run_all:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
