@@ -2,6 +2,12 @@ __pycache__/
 *.pyc
 .venv/
 .env
-snapshots/
+**/snapshots/
+scripts/snapshots
 *.csv
 *~
+\#*\#
+.\#*
+*.egg-info/
+tokens/
+foo.sql
