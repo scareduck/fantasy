@@ -1,0 +1,12 @@
+[Unit]
+Description=Fantasy Baseball ESPN forecaster sync
+After=network-online.target fantasy-sync.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlm/src/fantasy
+Environment=PATH=/home/rlm/.local/bin:/usr/local/bin:/usr/bin:/usr/sbin
+ExecStart=fantasy-espn
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,12 @@
+[Unit]
+Description=Fantasy Baseball pitcher start report emailer
+After=network-online.target fantasy-espn.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlm/src/fantasy
+Environment=PATH=/home/rlm/.local/bin:/usr/local/bin:/usr/bin:/usr/sbin
+ExecStart=fantasy-report --email
+StandardOutput=journal
+StandardError=journal

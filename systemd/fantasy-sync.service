@@ -1,0 +1,12 @@
+[Unit]
+Description=Fantasy Baseball Yahoo sync (players + rosters)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlm/src/fantasy
+Environment=PATH=/home/rlm/.local/bin:/usr/local/bin:/usr/bin:/usr/sbin
+ExecStart=fantasy-sync --all-rosters --statuses FA,W,T
+StandardOutput=journal
+StandardError=journal
