@@ -71,14 +71,14 @@ def load_settings() -> Settings:
         yahoo_client_secret=_require("YAHOO_CLIENT_SECRET", "yahoo-fantasy", "client_secret"),
         yahoo_redirect_uri=os.getenv("YAHOO_REDIRECT_URI", "").strip() or _pw("yahoo-fantasy", "redirect_uri", "oob"),
         yahoo_scope=os.getenv("YAHOO_SCOPE", "fspt-r").strip() or "fspt-r",
-        yahoo_token_file=Path(os.getenv("YAHOO_TOKEN_FILE", "tokens/yahoo_token.json")).expanduser(),
+        yahoo_token_file=Path(os.getenv("YAHOO_TOKEN_FILE", "") or Path(__file__).parent.parent / "tokens/yahoo_token.json").expanduser(),
         yahoo_league_key=(os.getenv("YAHOO_LEAGUE_KEY", "").strip() or None),
         db_host=os.getenv("DB_HOST", "").strip() or _pw("fantasy-db", "host", "127.0.0.1"),
         db_port=int(os.getenv("DB_PORT", "") or _pw("fantasy-db", "port", 3306)),
         db_user=_require("DB_USER", "fantasy-db", "user"),
         db_password=os.getenv("DB_PASSWORD", "").strip() or _pw("fantasy-db", "password", ""),
         db_name=_require("DB_NAME", "fantasy-db", "database"),
-        snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", "snapshots")).expanduser(),
+        snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", "") or Path(__file__).parent.parent / "snapshots").expanduser(),
         local_timezone=os.getenv("LOCAL_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
     )
 
@@ -90,6 +90,6 @@ def load_db_sync_settings() -> DbSyncSettings:
         db_user=_require("DB_USER", "fantasy-db", "user"),
         db_password=os.getenv("DB_PASSWORD", "").strip() or _pw("fantasy-db", "password", ""),
         db_name=_require("DB_NAME", "fantasy-db", "database"),
-        snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", "snapshots")).expanduser(),
+        snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", "") or Path(__file__).parent.parent / "snapshots").expanduser(),
         local_timezone=os.getenv("LOCAL_TIMEZONE", "America/Chicago").strip() or "America/Chicago",
     )

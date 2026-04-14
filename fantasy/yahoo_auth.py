@@ -123,10 +123,10 @@ class YahooAuth:
         elif self.settings.yahoo_redirect_uri == "oob":
             code = input("Paste the Yahoo authorization code: ").strip()
         else:
-            redirect_value = input(
-                "Paste the full redirect URL after approval, or just the code parameter: "
-            ).strip()
-            code = self._extract_code(redirect_value)
+            print(f"After approving, your browser will be redirected to:\n  {self.settings.yahoo_redirect_uri}")
+            print("The page will display an authorization code. Copy it and paste it here.")
+            code = input("Authorization code: ").strip()
+            code = self._extract_code(code)  # handles full URL or bare code
 
         response = self.session.post(
             TOKEN_URL,
