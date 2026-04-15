@@ -8,6 +8,7 @@ from fantasy.notify import send_alert
 from fantasy.yahoo_auth import InteractiveAuthRequired
 from scripts.espn_forecaster_sync import main as espn_main
 from scripts.pitcher_report import main as report_main
+from scripts.pitcher_stats_sync import run as pitcher_stats_run, parse_args as pitcher_stats_parse_args
 from scripts.yahoo_sync import parse_args, run as sync_run
 
 
@@ -21,13 +22,19 @@ def main() -> int:
             print(f"Yahoo sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
-        print("\n=== Step 2: ESPN forecaster sync ===")
+        print("\n=== Step 2: Pitcher season stats ===")
+        rc = pitcher_stats_run(pitcher_stats_parse_args([]))
+        if rc:
+            print(f"Pitcher stats sync failed (exit {rc}), aborting.", file=sys.stderr)
+            return rc
+
+        print("\n=== Step 3: ESPN forecaster sync ===")
         rc = espn_main()
         if rc:
             print(f"ESPN sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
-        print("\n=== Step 3: Pitcher reports ===")
+        print("\n=== Step 4: Pitcher reports ===")
         rc = report_main()
         if rc:
             print(f"Report failed (exit {rc}).", file=sys.stderr)
