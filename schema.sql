@@ -332,3 +332,14 @@ CREATE OR REPLACE VIEW current_espn_forecast AS
 SELECT *
 FROM espn_forecaster_snapshot
 WHERE captured_at_utc = (SELECT MAX(captured_at_utc) FROM espn_forecaster_snapshot);
+
+-- Current pitcher season stats: the most recent all-pitcher stats sync (status=A,T).
+CREATE OR REPLACE VIEW current_pitcher_stats AS
+SELECT pss.*
+FROM pitcher_season_stats pss
+WHERE pss.sync_run_id = (
+    SELECT MAX(sync_run_id)
+    FROM sync_run
+    WHERE requested_position = 'P'
+      AND requested_statuses = 'A,T'
+);

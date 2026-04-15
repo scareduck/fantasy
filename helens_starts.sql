@@ -12,5 +12,5 @@ FROM current_roster cr
 JOIN player p ON p.player_id = cr.player_id
 JOIN current_espn_forecast efs ON efs.player_id = cr.player_id
 WHERE efs.projection_text IS NOT NULL
-  AND cr.team_name = 'Tinker Evers'' Chance'
+  AND cr.team_name LIKE 'Tinker Evers%'
 ORDER BY start_date, fpts DESC;
