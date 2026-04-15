@@ -312,3 +312,23 @@ CREATE TABLE IF NOT EXISTS pitcher_season_stats (
         FOREIGN KEY (player_id) REFERENCES player (player_id)
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Current roster: the most recent roster snapshot across all teams.
+CREATE OR REPLACE VIEW current_roster AS
+SELECT
+    rs.roster_snapshot_id,
+    rs.league_id,
+    rs.team_key,
+    rs.team_name,
+    rs.player_id,
+    rs.yahoo_player_key,
+    rs.selected_position,
+    rs.captured_at_utc
+FROM roster_snapshot rs
+WHERE rs.captured_at_utc = (SELECT MAX(captured_at_utc) FROM roster_snapshot);
+
+-- Current ESPN forecaster: the most recent forecaster snapshot.
+CREATE OR REPLACE VIEW current_espn_forecast AS
+SELECT *
+FROM espn_forecaster_snapshot
+WHERE captured_at_utc = (SELECT MAX(captured_at_utc) FROM espn_forecaster_snapshot);

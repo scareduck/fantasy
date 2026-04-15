@@ -20,7 +20,7 @@ from fantasy.utils import format_snapshot_timestamp, utc_now, write_csv
 from fantasy.yahoo_client import YahooFantasyClient
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync Yahoo Fantasy Baseball waiver pitchers into MariaDB.")
     parser.add_argument("--league-key", help="Yahoo league key. If omitted, auto-discover from your current MLB leagues.")
     parser.add_argument("--statuses", default="FA,W", help="Comma-separated availability statuses to pull. Default: FA,W")
@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--my-roster", action="store_true", help="Sync the current user's team roster into roster_snapshot.")
     parser.add_argument("--all-rosters", action="store_true", help="Sync every team's roster into roster_snapshot.")
     parser.add_argument("--dry-run", action="store_true", help="Fetch and write CSV but do not write to MariaDB.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 
@@ -53,6 +53,10 @@ def choose_league(requested_key: str | None, discovered_leagues: list[dict]) -> 
 
 def main() -> int:
     args = parse_args()
+    return run(args)
+
+
+def run(args: argparse.Namespace) -> int:
     settings = load_settings()
     client = YahooFantasyClient(settings)
 

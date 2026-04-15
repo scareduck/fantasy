@@ -8,13 +8,15 @@ from fantasy.notify import send_alert
 from fantasy.yahoo_auth import InteractiveAuthRequired
 from scripts.espn_forecaster_sync import main as espn_main
 from scripts.pitcher_report import main as report_main
-from scripts.yahoo_sync import main as sync_main
+from scripts.yahoo_sync import parse_args, run as sync_run
 
 
 def main() -> int:
     try:
         print("=== Step 1: Yahoo sync ===")
-        rc = sync_main()
+        args = parse_args([])
+        args.all_rosters = True
+        rc = sync_run(args)
         if rc:
             print(f"Yahoo sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
