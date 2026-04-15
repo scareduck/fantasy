@@ -19,6 +19,7 @@ fantasy-espn    = "scripts.espn_forecaster_sync:main"
 fantasy-report  = "scripts.pitcher_report:main"
 fantasy-run-all      = "scripts.run_all:main"
 fantasy-keepalive    = "scripts.token_keepalive:main"
+fantasy-batter-sync  = "scripts.batter_sync:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -145,6 +145,30 @@ def parse_players(root: ET.Element) -> list[dict]:
 
 
 
+def parse_player_stats(root: ET.Element) -> dict[str, dict[int, str | None]]:
+    """Parse player season stats from a players;.../stats response.
+
+    Returns a mapping of yahoo_player_key -> {stat_id: raw_value_string}.
+    Values are kept as raw strings so callers can handle composite stats like
+    H/AB ("45/167") without losing information.
+    """
+    result: dict[str, dict[int, str | None]] = {}
+    for player in root.findall(".//y:player", NS):
+        player_key = find_text(player, "y:player_key")
+        if not player_key:
+            continue
+        stats: dict[int, str | None] = {}
+        for stat in player.findall(".//y:player_stats/y:stats/y:stat", NS):
+            stat_id_text = find_text(stat, "y:stat_id")
+            value_text = find_text(stat, "y:value")
+            if stat_id_text is None:
+                continue
+            stat_id = int(stat_id_text)
+            stats[stat_id] = None if (value_text is None or value_text == "-") else value_text
+        result[player_key] = stats
+    return result
+
+
 def _parse_percent_owned(player: ET.Element) -> float | None:
     value = find_text(player, "y:percent_owned/y:value")
     if value is None:
