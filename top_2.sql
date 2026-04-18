@@ -15,7 +15,7 @@ SELECT
     efs.forecaster_for_date                 AS week,
     efs.total_fpts,
     efs.starts
-FROM player_availability_snapshot pas
+FROM current_availability pas
 JOIN player p
     ON p.player_id = pas.player_id
 JOIN (
@@ -24,13 +24,11 @@ JOIN (
         forecaster_for_date,
         ROUND(SUM(CAST(projection_text AS DECIMAL(6,2))), 1) AS total_fpts,
         GROUP_CONCAT(matchup_text ORDER BY matchup_text SEPARATOR ', ') AS starts
-    FROM espn_forecaster_snapshot
+    FROM current_espn_forecast
     WHERE player_id IS NOT NULL
-      AND captured_at_utc = (SELECT MAX(captured_at_utc) FROM espn_forecaster_snapshot)
     GROUP BY player_id, forecaster_for_date
 ) efs
     ON efs.player_id = pas.player_id
-WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM sync_run)
-  and pas.availability_status='fa'
+WHERE pas.availability_status='fa'
 ORDER BY pas.availability_status, efs.total_fpts DESC
 limit 10;

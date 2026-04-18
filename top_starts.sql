@@ -15,12 +15,11 @@ SELECT
     efs.forecaster_for_date                 AS week,
     CAST(efs.projection_text AS DECIMAL(6,2)) AS fpts,
     efs.matchup_text AS starts
-FROM player_availability_snapshot pas
+FROM current_availability pas
 JOIN player p
     ON p.player_id = pas.player_id
 JOIN current_espn_forecast efs
     ON efs.player_id = pas.player_id
-WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM sync_run)
-  AND pas.availability_status = 'fa'
+WHERE pas.availability_status = 'fa'
 ORDER BY fpts DESC
 LIMIT 10;
