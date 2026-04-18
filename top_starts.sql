@@ -14,13 +14,16 @@ SELECT
 #    pas.percent_owned,
     efs.forecaster_for_date                 AS week,
     CAST(efs.projection_text AS DECIMAL(6,2)) AS fpts,
-    efs.matchup_text AS starts
-FROM player_availability_snapshot pas
+    efs.matchup_text AS starts,
+    cast(cps.era as decimal(6,2)) as era
+FROM current_availability pas
 JOIN player p
     ON p.player_id = pas.player_id
 JOIN current_espn_forecast efs
     ON efs.player_id = pas.player_id
-WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM sync_run)
-  AND pas.availability_status = 'fa'
-ORDER BY fpts DESC
-LIMIT 10;
+inner join current_pitcher_stats cps
+    on p.player_id=cps.player_id
+WHERE pas.availability_status = 'fa'
+  and efs.projection_text >= 9
+ORDER BY fpts DESC;
+#LIMIT 10;

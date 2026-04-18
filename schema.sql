@@ -343,3 +343,39 @@ WHERE pss.sync_run_id = (
     WHERE requested_position = 'P'
       AND requested_statuses = 'A,T'
 );
+
+-- Current player availability: the most recent yahoo_sync availability snapshot.
+CREATE OR REPLACE VIEW current_availability AS
+SELECT
+    pas.snapshot_id,
+    pas.sync_run_id,
+    pas.league_id,
+    pas.player_id,
+    pas.captured_at_utc,
+    pas.availability_status,
+    pas.source_page_start,
+    pas.source_page_count,
+    pas.percent_owned,
+    pas.raw_player_xml,
+    pas.created_at_utc
+FROM player_availability_snapshot pas
+WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM player_availability_snapshot);
+
+-- Current batter season stats: the most recent batter stats sync.
+CREATE OR REPLACE VIEW current_batter_stats AS
+SELECT
+    bss.batter_season_stats_id,
+    bss.sync_run_id,
+    bss.player_id,
+    bss.captured_at_utc,
+    bss.ab,
+    bss.r,
+    bss.h,
+    bss.hr,
+    bss.rbi,
+    bss.sb,
+    bss.bb,
+    bss.obp,
+    bss.created_at_utc
+FROM batter_season_stats bss
+WHERE bss.sync_run_id = (SELECT MAX(sync_run_id) FROM batter_season_stats);
