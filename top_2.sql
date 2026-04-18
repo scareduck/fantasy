@@ -14,7 +14,8 @@ SELECT
 #    pas.percent_owned,
     efs.forecaster_for_date                 AS week,
     efs.total_fpts,
-    efs.starts
+    efs.starts,
+    cast(cps.era as decimal(6,2)) as era
 FROM current_availability pas
 JOIN player p
     ON p.player_id = pas.player_id
@@ -29,6 +30,8 @@ JOIN (
     GROUP BY player_id, forecaster_for_date
 ) efs
     ON efs.player_id = pas.player_id
+inner join current_pitcher_stats cps
+    on p.player_id=cps.player_id
 WHERE pas.availability_status='fa'
 ORDER BY pas.availability_status, efs.total_fpts DESC
 limit 10;
