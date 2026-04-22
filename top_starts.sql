@@ -25,5 +25,9 @@ inner join current_pitcher_stats cps
     on p.player_id=cps.player_id
 WHERE pas.availability_status = 'fa'
   and efs.projection_text >= 9
+having STR_TO_DATE(
+        CONCAT(YEAR(CURDATE()), '/',
+               SUBSTRING_INDEX(SUBSTRING_INDEX(efs.matchup_text, '-', 1), ' ', -1)),
+        '%Y/%m/%d') >= now()
 ORDER BY fpts DESC;
 #LIMIT 10;
