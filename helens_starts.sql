@@ -13,4 +13,5 @@ JOIN player p ON p.player_id = cr.player_id
 JOIN current_espn_forecast efs ON efs.player_id = cr.player_id
 WHERE efs.projection_text IS NOT NULL
   AND cr.team_name LIKE 'Tinker Evers%'
+  AND STR_TO_DATE(CONCAT(SUBSTRING_INDEX(efs.matchup_text, '-', 1), ' 2026'), '%a %c/%e %Y') >= CURDATE()
 ORDER BY start_date, fpts DESC;
