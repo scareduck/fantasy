@@ -38,7 +38,36 @@ def fpts_class(fpts: float) -> str:
     return "fpts"
 
 
-def rows_to_html(rows: list[dict], title: str) -> str:
+def fetch_league_id(conn) -> str | None:
+    cur = conn.cursor()
+    cur.execute("SELECT yahoo_league_key FROM league LIMIT 1")
+    row = cur.fetchone()
+    return row[0].rsplit(".", 1)[-1] if row else None
+
+
+def yahoo_stats_url(player_key: str) -> str:
+    numeric_id = player_key.rsplit(".", 1)[-1]
+    return f"https://sports.yahoo.com/mlb/players/{numeric_id}/"
+
+
+def yahoo_add_url(player_key: str, league_id: str) -> str:
+    numeric_id = player_key.rsplit(".", 1)[-1]
+    return f"https://baseball.fantasysports.yahoo.com/b1/{league_id}/addplayer?apid={numeric_id}"
+
+
+def player_cell(r: dict, league_id: str | None = None) -> str:
+    key = r.get("yahoo_player_key") or ""
+    name = r["full_name"]
+    if not key:
+        return name
+    stats_url = yahoo_stats_url(key)
+    if league_id:
+        add_url = yahoo_add_url(key, league_id)
+        return f'<a href="{add_url}">{name}</a> <a href="{stats_url}" style="font-size: 11px; color: #666;">Stats</a>'
+    return f'<a href="{stats_url}">{name}</a>'
+
+
+def rows_to_html(rows: list[dict], title: str, league_id: str | None = None) -> str:
     today = date.today().strftime("%B %d, %Y")
     body_rows = []
     for r in rows:
@@ -47,7 +76,7 @@ def rows_to_html(rows: list[dict], title: str) -> str:
         body_rows.append(
             f"  <tr>"
             f"<td>{r['start_date']}</td>"
-            f"<td>{r['full_name']}</td>"
+            f"<td>{player_cell(r, league_id)}</td>"
             f"<td>{r['team']}</td>"
             f"<td>{r['slot']}</td>"
             f"<td>{r['start']}</td>"
@@ -157,6 +186,7 @@ def main() -> int:
     if args.email and not smtp_host:
         raise SystemExit(f"Email requested but no '{smtp_account}' smtp_host found in ~/.passwords.json.")
 
+    league_id = fetch_league_id(conn)
     recipients = load_recipients(args.recipients)
 
     for recipient in recipients:
@@ -170,7 +200,7 @@ def main() -> int:
             continue
 
         rows = run_sql(conn, sql_path)
-        html = rows_to_html(rows, title)
+        html = rows_to_html(rows, title, league_id)
 
         if html_dir:
             out_path = html_dir / f"{name}_starts.html"
