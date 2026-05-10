@@ -9,6 +9,7 @@
 
 SELECT
     p.full_name,
+    p.yahoo_player_key,
     p.editorial_team_abbr                   AS team,
 #    pas.availability_status as avail,
 #    pas.percent_owned,

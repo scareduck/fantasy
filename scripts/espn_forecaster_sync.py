@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-import requests
+from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
 from fantasy.config import load_db_sync_settings
@@ -23,41 +23,29 @@ from fantasy.espn_forecaster import correlate_forecaster_row, normalize_team_abb
 from fantasy.utils import format_snapshot_timestamp, utc_now
 
 ESPN_FALLBACK_URL = "https://www.espn.com/fantasy/baseball/story/_/id/31165100/fantasy-baseball-forecaster-probable-starting-pitcher-projections-matchups-daily-weekly-leagues"
-ESPN_INDEX_URL = "https://www.espn.com/fantasy/baseball/"
 SOURCE_NAME = "espn_forecaster"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
-def discover_forecaster_url() -> str:
-    """
-    Try the known evergreen forecaster URL first (has FPTS data).
-    Falls back to ESPN_FALLBACK_URL if the primary is unreachable.
-    """
-    try:
-        resp = requests.get(ESPN_FALLBACK_URL, timeout=15, headers={"User-Agent": USER_AGENT})
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for table in soup.select("table"):
-            header = table.select_one("tr")
-            if header:
-                headers = [c.get_text(strip=True).upper() for c in header.find_all(["th", "td"])]
-                if "FPTS" in headers:
-                    return ESPN_FALLBACK_URL
-    except Exception:
-        pass
-    return ESPN_FALLBACK_URL
-
-
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync ESPN forecaster pitching rows into MariaDB.")
     parser.add_argument("--url", default=None, help="Forecaster URL to fetch (default: auto-discover)")
     parser.add_argument("--dry-run", action="store_true", help="Parse and write CSV outputs without DB inserts")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def fetch_page(url: str) -> str:
-    response = requests.get(url, timeout=30, headers={"User-Agent": USER_AGENT})
-    response.raise_for_status()
-    return response.text
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(user_agent=USER_AGENT)
+        page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+        # Wait for the forecaster table to appear (up to 30s)
+        try:
+            page.wait_for_selector("table", timeout=30_000)
+        except Exception:
+            pass
+        html = page.content()
+        browser.close()
+    return html
 
 
 def _br_chunks(cell) -> list[str]:
@@ -227,8 +215,8 @@ def write_rows_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     if args.dry_run:
         settings = SimpleNamespace(
             snapshot_dir=Path(os.getenv("SNAPSHOT_DIR", Path(__file__).parent.parent / "snapshots")),
@@ -239,7 +227,7 @@ def main() -> int:
     captured_at = utc_now()
     ts = format_snapshot_timestamp(captured_at, settings.local_timezone)
 
-    html = fetch_page(args.url or discover_forecaster_url())
+    html = fetch_page(args.url or ESPN_FALLBACK_URL)
     rows, forecaster_for_date = parse_espn_forecaster_rows(html)
     if not rows:
         raise SystemExit("No forecaster rows were parsed from the ESPN page.")

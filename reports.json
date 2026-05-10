@@ -3,12 +3,14 @@
     "name": "rob",
     "email": "rlm@scareduck.com",
     "sql": "my_starts.sql",
-    "title": "Your Starts This Week"
+    "title": "Your Starts This Week",
+    "team_key": "469.l.73362.t.8"
   },
   {
     "name": "helen",
     "email": "helen@doubledogmusic.com",
     "sql": "helens_starts.sql",
-    "title": "Tinker Evers\u2019 Chance \u2014 Starts This Week"
+    "title": "Tinker Evers’ Chance — Starts This Week",
+    "team_key": "469.l.73362.t.10"
   }
 ]

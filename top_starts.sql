@@ -9,6 +9,7 @@
 
 SELECT
     p.full_name,
+    p.yahoo_player_key,
     p.editorial_team_abbr                   AS team,
 #    pas.availability_status as avail,
 #    pas.percent_owned,
@@ -28,6 +29,6 @@ WHERE pas.availability_status = 'fa'
 having STR_TO_DATE(
         CONCAT(YEAR(CURDATE()), '/',
                SUBSTRING_INDEX(SUBSTRING_INDEX(efs.matchup_text, '-', 1), ' ', -1)),
-        '%Y/%m/%d') >= now()
+        '%Y/%m/%d') >= CURDATE()
 ORDER BY fpts DESC;
 #LIMIT 10;

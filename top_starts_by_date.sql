@@ -26,5 +26,5 @@ INNER JOIN current_pitcher_stats cps
     ON p.player_id = cps.player_id
 WHERE pas.availability_status = 'fa'
   AND efs.projection_text >= 9
-having game_date>=now()
+having game_date>=curdate()
 ORDER BY game_date, fpts DESC;

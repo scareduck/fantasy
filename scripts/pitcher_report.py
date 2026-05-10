@@ -38,16 +38,55 @@ def fpts_class(fpts: float) -> str:
     return "fpts"
 
 
-def rows_to_html(rows: list[dict], title: str) -> str:
+def fetch_league_id(conn) -> str | None:
+    cur = conn.cursor()
+    cur.execute("SELECT yahoo_league_key FROM league LIMIT 1")
+    row = cur.fetchone()
+    return row[0].rsplit(".", 1)[-1] if row else None
+
+
+def yahoo_stats_url(player_key: str) -> str:
+    numeric_id = player_key.rsplit(".", 1)[-1]
+    return f"https://sports.yahoo.com/mlb/players/{numeric_id}/"
+
+
+def yahoo_add_url(player_key: str, league_id: str) -> str:
+    numeric_id = player_key.rsplit(".", 1)[-1]
+    return f"https://baseball.fantasysports.yahoo.com/b1/{league_id}/addplayer?apid={numeric_id}"
+
+
+def player_cell(r: dict, league_id: str | None = None, stats_only: bool = False) -> str:
+    key = r.get("yahoo_player_key") or ""
+    name = r["full_name"]
+    if not key:
+        return name
+    stats_url = yahoo_stats_url(key)
+    if league_id and not stats_only:
+        add_url = yahoo_add_url(key, league_id)
+        return f'<a href="{add_url}">{name}</a> <a href="{stats_url}" style="font-size: 11px; color: #666;">Stats</a>'
+    return f'<a href="{stats_url}">{name}</a>'
+
+
+def roster_url(league_id: str, team_number: str, date_val: object) -> str:
+    date_str = date_val.strftime("%Y-%m-%d") if hasattr(date_val, "strftime") else str(date_val)
+    return f"https://baseball.fantasysports.yahoo.com/b1/{league_id}/{team_number}?date={date_str}"
+
+
+def rows_to_html(rows: list[dict], title: str, league_id: str | None = None, team_number: str | None = None) -> str:
     today = date.today().strftime("%B %d, %Y")
     body_rows = []
     for r in rows:
         fpts = float(r["fpts"])
         cls = fpts_class(fpts)
+        date_val = r["start_date"]
+        if league_id and team_number:
+            date_cell = f'<a href="{roster_url(league_id, team_number, date_val)}">{date_val}</a>'
+        else:
+            date_cell = str(date_val)
         body_rows.append(
             f"  <tr>"
-            f"<td>{r['start_date']}</td>"
-            f"<td>{r['full_name']}</td>"
+            f"<td>{date_cell}</td>"
+            f"<td>{player_cell(r, league_id, stats_only=True)}</td>"
             f"<td>{r['team']}</td>"
             f"<td>{r['slot']}</td>"
             f"<td>{r['start']}</td>"
@@ -157,6 +196,7 @@ def main() -> int:
     if args.email and not smtp_host:
         raise SystemExit(f"Email requested but no '{smtp_account}' smtp_host found in ~/.passwords.json.")
 
+    league_id = fetch_league_id(conn)
     recipients = load_recipients(args.recipients)
 
     for recipient in recipients:
@@ -169,8 +209,10 @@ def main() -> int:
             print(f"WARNING: SQL file not found for {name}: {sql_path}")
             continue
 
+        team_key = recipient.get("team_key", "")
+        team_number = team_key.rsplit(".", 1)[-1] if team_key else None
         rows = run_sql(conn, sql_path)
-        html = rows_to_html(rows, title)
+        html = rows_to_html(rows, title, league_id, team_number)
 
         if html_dir:
             out_path = html_dir / f"{name}_starts.html"

@@ -4,6 +4,7 @@
 SELECT
     STR_TO_DATE(CONCAT(SUBSTRING_INDEX(efs.matchup_text, '-', 1), ' 2026'), '%a %c/%e %Y') AS start_date,
     p.full_name,
+    p.yahoo_player_key,
     p.editorial_team_abbr AS team,
     cr.selected_position AS slot,
     efs.matchup_text AS start,

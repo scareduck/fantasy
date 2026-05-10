@@ -11,6 +11,7 @@ dependencies = [
     "requests>=2.31.0",
     "mariadb>=1.1.10",
     "beautifulsoup4>=4.12.0",
+    "playwright>=1.40.0",
 ]
 
 [project.scripts]
@@ -21,6 +22,7 @@ fantasy-run-all      = "scripts.run_all:main"
 fantasy-keepalive    = "scripts.token_keepalive:main"
 fantasy-batter-sync      = "scripts.batter_sync:main"
 fantasy-pitcher-stats    = "scripts.pitcher_stats_sync:main"
+fantasy-waiver-report    = "scripts.waiver_report:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
