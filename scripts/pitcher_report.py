@@ -145,7 +145,7 @@ def send_email(
             server.sendmail(from_addr, [to_addr], msg.as_string())
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate and/or email pitcher start reports.")
     parser.add_argument("--html-dir", default=None, help="Directory to write HTML files into.")
     parser.add_argument("--email", action="store_true", help="Send reports via email.")
@@ -155,7 +155,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Recipient names to include (default: all configured). E.g. --recipients rob helen",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def load_recipients(requested: list[str] | None) -> list[dict]:
@@ -172,8 +172,8 @@ def load_recipients(requested: list[str] | None) -> list[dict]:
     return recipients
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     settings = load_db_sync_settings()
     conn = connect(settings)
 
@@ -235,9 +235,6 @@ def main() -> int:
                 html_body=html,
             )
             print(f"Emailed {name} <{email}>")
-
-        if not html_dir and not args.email:
-            print(html)
 
     conn.close()
     return 0

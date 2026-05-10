@@ -232,9 +232,6 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"Emailed {recipient['name']} <{email_addr}>")
 
-    if not html_dir and not args.email:
-        print(html)
-
     return 0
 
 

@@ -45,7 +45,7 @@ def main() -> int:
             return rc
 
         print("\n=== Step 3: ESPN forecaster sync ===")
-        rc = espn_main()
+        rc = espn_main([])
         if rc:
             print(f"ESPN sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
@@ -56,12 +56,7 @@ def main() -> int:
             report_argv.append("--email")
         if run_args.report_recipients:
             report_argv += ["--recipients"] + run_args.report_recipients
-        saved_argv = sys.argv[1:]
-        sys.argv[1:] = report_argv
-        try:
-            rc = report_main()
-        finally:
-            sys.argv[1:] = saved_argv
+        rc = report_main(report_argv)
         if rc:
             print(f"Report failed (exit {rc}).", file=sys.stderr)
             return rc
