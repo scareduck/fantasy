@@ -7,7 +7,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 13px;
   background: #e8eaed;
   color: #202124;
@@ -19,97 +19,96 @@ header {
   color: #fff;
   padding: 10px 16px;
   display: flex;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  gap: 14px;
 }
 header h1 { font-size: 17px; font-weight: 600; }
-header a { color: rgba(255,255,255,0.8); font-size: 12px; text-decoration: none; }
+header a  { color: rgba(255,255,255,0.8); font-size: 12px; text-decoration: none; }
 header a:hover { text-decoration: underline; }
-header .period { font-size: 12px; opacity: 0.8; margin-left: auto; }
+header .spacer { flex: 1; }
+header .period { font-size: 12px; opacity: 0.75; }
 
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 16px;
+select#team-select {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  cursor: pointer;
 }
+select#team-select option { background: #1558b0; color: #fff; }
 
-@media (max-width: 900px) {
-  .grid { grid-template-columns: 1fr; }
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 16px 0;
+  background: #e8eaed;
 }
+.tab {
+  padding: 7px 20px;
+  border: 1px solid #bdc1c6;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  background: #dadce0;
+  font-weight: 500;
+  color: #5f6368;
+  transition: background 0.1s;
+}
+.tab:hover  { background: #ececec; }
+.tab.active { background: #fff; color: #1a73e8; border-color: #dadce0; }
 
-.team-panel {
+.panel {
   background: #fff;
   border: 1px solid #dadce0;
-  border-radius: 6px;
-  overflow: hidden;
+  border-top: none;
 }
 
-.team-header {
-  background: #f1f3f4;
-  padding: 9px 14px;
-  font-weight: 700;
-  font-size: 14px;
-  border-bottom: 2px solid #dadce0;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.team-header .total-label { font-size: 11px; color: #5f6368; font-weight: 400; }
-.team-header .total-val   { font-size: 13px; font-weight: 700; color: #1a73e8; }
-
+.table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th {
-  background: #f8f9fa;
-  padding: 6px 10px;
+thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #f1f3f4;
+  padding: 7px 10px;
   text-align: left;
   font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.4px;
-  color: #5f6368;
-  border-bottom: 1px solid #dadce0;
   white-space: nowrap;
+  border-bottom: 2px solid #dadce0;
+  color: #5f6368;
 }
-th.num { text-align: right; }
-
-td {
+thead th.num { text-align: right; }
+tbody td {
   padding: 5px 10px;
   border-bottom: 1px solid #f1f1f1;
-  vertical-align: top;
+  white-space: nowrap;
 }
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: #f8f9ff; }
-
+tbody tr:hover td { background: #f8f9ff; }
+tbody tr:last-child td { border-bottom: none; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
-.name-cell { min-width: 130px; font-weight: 500; }
-.mlb-team  { color: #5f6368; font-size: 11px; }
 
-/* roster position badges */
-.rpos {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+.slot {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
 }
-.rpos-sp   { background: #e8f0fe; color: #1a73e8; }
-.rpos-rp   { background: #e6f4ea; color: #137333; }
-.rpos-p    { background: #e6f4ea; color: #137333; }
-.rpos-bn   { background: #f1f3f4; color: #5f6368; }
-.rpos-il   { background: #fce8e6; color: #c5221f; }
+.slot-sp  { background: #e8f0fe; color: #1a73e8; }
+.slot-rp  { background: #e6f4ea; color: #137333; }
+.slot-bn  { background: #f1f3f4; color: #5f6368; }
+.slot-bat { background: #fff3e0; color: #e65100; }
 
-/* injury status */
-.st-il { color: #c5221f; font-size: 10px; font-weight: 600; }
-.st-na { color: #e37400; font-size: 10px; font-weight: 600; }
+.fpts-hi   { color: #137333; font-weight: 700; }
+.fpts-mid  { color: #1a73e8; font-weight: 600; }
+.fpts-lo   { color: #5f6368; }
+.fpts-none { color: #bbb; font-style: italic; }
+.era-good  { color: #137333; }
+.era-bad   { color: #c5221f; }
 
-/* starts list */
-.starts { font-size: 11px; line-height: 1.7; }
-.start-line { white-space: nowrap; }
-.fpts-val { color: #1a73e8; font-weight: 600; }
-.no-starts { color: #bbb; font-size: 11px; font-style: italic; }
-
-.fpts-total { font-weight: 700; color: #1a73e8; }
-.fpts-zero  { color: #bbb; }
+.footer {
+  padding: 6px 14px; font-size: 11px; color: #80868b;
+  border-top: 1px solid #ebebeb; background: #fafafa;
+}
 
 .msg { padding: 40px; text-align: center; color: #5f6368; font-size: 14px; }
 .msg.err { color: #c5221f; }
@@ -119,104 +118,175 @@ tr:hover td { background: #f8f9ff; }
 
 <header>
   <h1>Lineup Helper</h1>
-  <a href="index.html">← Home</a>
+  <select id="team-select">
+    <option value="469.l.73362.t.8">Miskatonic Cthulhus</option>
+    <option value="469.l.73362.t.10">Tinker Evers&rsquo; Chance</option>
+  </select>
+  <div class="spacer"></div>
   <span class="period" id="period"></span>
+  <a href="index.html">&#8592; Home</a>
 </header>
 
-<div class="grid" id="grid">
-  <div class="msg">Loading…</div>
+<div class="tabs">
+  <div class="tab active" data-tab="starts">Pitcher Starts</div>
+  <div class="tab"        data-tab="matchups">Batter Matchups</div>
+</div>
+
+<div class="panel">
+  <div class="table-scroll">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"><tr><td class="msg" colspan="99">Loading&#8230;</td></tr></tbody>
+    </table>
+  </div>
+  <div class="footer" id="footer"></div>
 </div>
 
 <script>
-'use strict';
+"use strict";
 
-const MY_TEAM_KEY  = ‘469.l.73362.t.8’;   // Miskatonic Cthulhus
-const HER_TEAM_KEY = ‘469.l.73362.t.10’;  // Tinker Evers’ Chance
+// cache[tab][team_key] = rows
+const cache = { starts: {}, matchups: {} };
 
-function rposClass(pos) {
-  if (!pos) return '';
-  const p = pos.toUpperCase();
-  if (p === 'SP') return 'rpos rpos-sp';
-  if (p === 'RP') return 'rpos rpos-rp';
-  if (p === 'P')  return 'rpos rpos-p';
-  if (p === 'IL') return 'rpos rpos-il';
-  return 'rpos rpos-bn';
+let activeTab  = "starts";
+let activeTeam = "469.l.73362.t.8";
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function fptsCls(v) {
+  if (v === null) return "fpts-none";
+  if (v >= 10)   return "fpts-hi";
+  if (v >= 6)    return "fpts-mid";
+  return "fpts-lo";
+}
+function eraCls(v) {
+  if (v === null) return "";
+  return v <= 3.5 ? "era-good" : v >= 5.0 ? "era-bad" : "";
+}
+function slotBadge(s, cls) {
+  return `<span class="slot ${cls}">${s || ""}</span>`;
+}
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
 }
 
-function statusBadge(s) {
-  if (!s) return '';
-  if (/^IL/.test(s)) return ` <span class="st-il">${s}</span>`;
-  if (s === 'NA')    return ` <span class="st-na">NA</span>`;
-  return '';
-}
+// ── Column definitions ───────────────────────────────────────────────────────
 
-function buildStartsHtml(matchups, projections) {
-  if (!matchups) return '<span class="no-starts">no starts</span>';
-  const ms = matchups.split('|');
-  const ps = projections ? projections.split('|') : [];
-  return '<div class="starts">' + ms.map((m, i) => {
-    const pts = ps[i] != null ? parseFloat(ps[i]).toFixed(1) : '?';
-    return `<div class="start-line">${m} <span class="fpts-val">${pts}</span></div>`;
-  }).join('') + '</div>';
-}
+const COLS = {
+  starts: [
+    { label: "Date",    key: "start_date",
+      fmt: (v)    => fmtDate(v) },
+    { label: "Pitcher", key: "name" },
+    { label: "MLB",     key: "mlb_team" },
+    { label: "Slot",    key: "slot",
+      fmt: (v, r) => slotBadge(r.slot, r.slot === "SP" ? "slot-sp" : "slot-bn") },
+    { label: "Matchup", key: "start" },
+    { label: "FPTS",    key: "fpts",  cls: "num",
+      fmt: (v)    => `<span class="${fptsCls(v)}">${v !== null ? v.toFixed(1) : "no game"}</span>` },
+  ],
+  matchups: [
+    { label: "Batter",      key: "batter" },
+    { label: "Team",        key: "batter_team" },
+    { label: "Slot",        key: "slot",
+      fmt: (v, r) => slotBadge(r.slot, "slot-bat") },
+    { label: "Opp Pitcher", key: "opp_pitcher",
+      fmt: (v)    => v || `<span class="fpts-none">off day</span>` },
+    { label: "Matchup",     key: "matchup",  fmt: v => v || "" },
+    { label: "Opp FPTS",    key: "fpts",     cls: "num",
+      fmt: (v)    => `<span class="${fptsCls(v)}">${v !== null ? v.toFixed(1) : "&#8212;"}</span>` },
+    { label: "ERA",         key: "era",      cls: "num",
+      fmt: (v)    => v !== null ? `<span class="${eraCls(v)}">${v.toFixed(2)}</span>` : "" },
+  ],
+};
 
-function buildTable(players) {
-  if (!players.length) return '<p class="msg">No pitchers found.</p>';
+// ── Render ───────────────────────────────────────────────────────────────────
 
-  const activeFpts = players
-    .filter(p => p.roster_pos !== 'IL')
-    .reduce((s, p) => s + p.total_fpts, 0);
+function render(rows) {
+  const cols   = COLS[activeTab];
+  const thead  = document.getElementById("thead");
+  const tbody  = document.getElementById("tbody");
+  const footer = document.getElementById("footer");
 
-  const rows = players.map(p => {
-    const fptsHtml = p.total_fpts > 0
-      ? `<span class="fpts-total">${p.total_fpts.toFixed(1)}</span>`
-      : `<span class="fpts-zero">—</span>`;
-    return `<tr>
-      <td class="name-cell">${p.name}${statusBadge(p.status)}</td>
-      <td class="mlb-team">${p.mlb_team || ''}</td>
-      <td><span class="${rposClass(p.roster_pos)}">${p.roster_pos}</span></td>
-      <td>${buildStartsHtml(p.matchups, p.projections)}</td>
-      <td class="num">${fptsHtml}</td>
-    </tr>`;
-  }).join('');
+  thead.innerHTML = "<tr>" + cols.map(c =>
+    `<th class="${c.cls || ""}">${c.label}</th>`
+  ).join("") + "</tr>";
 
-  return `
-    <div class="team-header">
-      <span>${players[0].team_name}</span>
-      <span>
-        <span class="total-label">active starters&nbsp;</span>
-        <span class="total-val">${activeFpts.toFixed(1)} FPTS</span>
-      </span>
-    </div>
-    <table>
-      <thead><tr>
-        <th>Pitcher</th><th>Team</th><th>Pos</th><th>Starts</th><th class="num">FPTS</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-}
+  if (!rows.length) {
+    const msg = activeTab === "matchups" ? "No games today." : "No upcoming starts.";
+    tbody.innerHTML = `<tr><td colspan="99" class="msg">${msg}</td></tr>`;
+    footer.textContent = "";
+    return;
+  }
 
-async function load() {
-  const grid = document.getElementById('grid');
-  try {
-    const resp = await fetch('api.php?type=lineup');
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
+  tbody.innerHTML = rows.map(row =>
+    "<tr>" + cols.map(c => {
+      const raw = row[c.key];
+      const val = c.fmt ? c.fmt(raw, row) : (raw != null ? raw : "");
+      return `<td class="${c.cls || ""}">${val}</td>`;
+    }).join("") + "</tr>"
+  ).join("");
 
-    const period = data.find(r => r.period)?.period;
-    if (period) document.getElementById('period').textContent = period;
-
-    const mine  = data.filter(r => r.team_key === MY_TEAM_KEY);
-    const hers  = data.filter(r => r.team_key === HER_TEAM_KEY);
-
-    grid.innerHTML =
-      `<div class="team-panel">${buildTable(mine)}</div>` +
-      `<div class="team-panel">${buildTable(hers)}</div>`;
-  } catch (e) {
-    grid.innerHTML = `<div class="msg err">Error: ${e.message}</div>`;
+  if (activeTab === "starts") {
+    const total = rows.reduce((s, r) => s + (r.fpts || 0), 0);
+    footer.textContent = rows.length + " starts · " + total.toFixed(1) + " projected FPTS";
+  } else {
+    const playing = rows.filter(r => r.fpts !== null).length;
+    footer.textContent = playing + " of " + rows.length + " position players have a game today";
   }
 }
+
+// ── Load ─────────────────────────────────────────────────────────────────────
+
+async function load() {
+  const tab  = activeTab;
+  const team = activeTeam;
+
+  if (cache[tab][team]) { render(cache[tab][team]); return; }
+
+  document.getElementById("tbody").innerHTML =
+    "<tr><td colspan=\"99\" class=\"msg\">Loading&#8230;</td></tr>";
+  document.getElementById("footer").textContent = "";
+
+  try {
+    const resp = await fetch("api.php?type=" + tab + "&team=" + encodeURIComponent(team));
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    cache[tab][team] = data;
+    if (activeTab === tab && activeTeam === team) render(data);
+  } catch (e) {
+    document.getElementById("tbody").innerHTML =
+      "<tr><td colspan=\"99\" class=\"msg err\">Error: " + e.message + "</td></tr>";
+  }
+}
+
+// ── Fetch ESPN period label ───────────────────────────────────────────────────
+
+fetch("api.php?type=meta")
+  .then(function(r) { return r.json(); })
+  .then(function(m) {
+    if (m.pitcher_sync) document.getElementById("period").textContent = m.pitcher_sync;
+  })
+  .catch(function() {});
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+
+document.querySelectorAll(".tab").forEach(function(t) {
+  t.addEventListener("click", function() {
+    if (t.dataset.tab === activeTab) return;
+    activeTab = t.dataset.tab;
+    document.querySelectorAll(".tab").forEach(function(x) { x.classList.remove("active"); });
+    t.classList.add("active");
+    load();
+  });
+});
+
+document.getElementById("team-select").addEventListener("change", function() {
+  activeTeam = this.value;
+  load();
+});
 
 load();
 </script>

@@ -23,6 +23,89 @@ if ($type === 'meta') {
     exit;
 }
 
+// Resolve team_key from ?team= param; defaults to Rob's team.
+$TEAMS = [
+    '469.l.73362.t.8'  => 'Miskatonic Cthulhus',
+    '469.l.73362.t.10' => "Tinker Evers\u{2019} Chance",
+];
+$team_key = isset($_GET['team']) && array_key_exists($_GET['team'], $TEAMS)
+    ? $_GET['team'] : '469.l.73362.t.8';
+
+if ($type === 'starts') {
+    $stmt = $conn->prepare("
+        SELECT
+            DATE_FORMAT(
+                STR_TO_DATE(
+                    CONCAT(SUBSTRING_INDEX(efs.matchup_text, '-', 1), ' ', YEAR(CURDATE())),
+                    '%a %c/%e %Y'
+                ), '%Y-%m-%d'
+            )                                           AS start_date,
+            p.full_name                                 AS name,
+            p.editorial_team_abbr                       AS mlb_team,
+            cr.selected_position                        AS slot,
+            efs.matchup_text                            AS start,
+            CAST(efs.projection_text AS DECIMAL(6,2))   AS fpts
+        FROM current_roster cr
+        JOIN player p ON p.player_id = cr.player_id
+        JOIN current_espn_forecast efs ON efs.player_id = cr.player_id
+        WHERE efs.projection_text IS NOT NULL
+          AND cr.team_key = ?
+          AND STR_TO_DATE(
+                CONCAT(SUBSTRING_INDEX(efs.matchup_text, '-', 1), ' ', YEAR(CURDATE())),
+                '%a %c/%e %Y'
+              ) >= CURDATE()
+        ORDER BY start_date, fpts DESC
+    ");
+    $stmt->bind_param('s', $team_key);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['fpts'] = $row['fpts'] !== null ? (float)$row['fpts'] : null;
+        $rows[] = $row;
+    }
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+if ($type === 'matchups') {
+    $stmt = $conn->prepare("
+        SELECT
+            p.full_name                                 AS batter,
+            p.editorial_team_abbr                       AS batter_team,
+            cr.selected_position                        AS slot,
+            opp.pitcher_name                            AS opp_pitcher,
+            opp.team_abbr                               AS pitcher_team,
+            opp.matchup_text                            AS matchup,
+            CAST(opp.projection_text AS DECIMAL(6,2))   AS fpts,
+            CAST(cps.era AS DECIMAL(6,2))               AS era
+        FROM current_roster cr
+        JOIN player p ON p.player_id = cr.player_id
+        LEFT JOIN current_espn_forecast opp
+            ON  opp.opponent_team_abbr = p.editorial_team_abbr
+            AND opp.matchup_text LIKE CONCAT('%', MONTH(CURDATE()), '/', DAY(CURDATE()), '%')
+            AND opp.projection_text IS NOT NULL
+        LEFT JOIN current_pitcher_stats cps ON cps.player_id = opp.player_id
+        WHERE p.position_type = 'B'
+          AND cr.selected_position != 'IL'
+          AND cr.team_key = ?
+        ORDER BY fpts DESC
+    ");
+    $stmt->bind_param('s', $team_key);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['fpts'] = $row['fpts'] !== null ? (float)$row['fpts'] : null;
+        $row['era']  = $row['era']  !== null ? (float)$row['era']  : null;
+        $rows[] = $row;
+    }
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 if ($type === 'lineup') {
     $sql = "
         SELECT
