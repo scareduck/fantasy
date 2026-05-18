@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fantasy FA Browser</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  background: #e8eaed;
+  color: #202124;
+  min-height: 100vh;
+}
+
+header {
+  background: #1a73e8;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+header h1 { font-size: 17px; font-weight: 600; }
+header span { font-size: 12px; opacity: 0.8; }
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 16px 0;
+  background: #e8eaed;
+}
+.tab {
+  padding: 7px 20px;
+  border: 1px solid #bdc1c6;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  background: #dadce0;
+  font-weight: 500;
+  color: #5f6368;
+  transition: background 0.1s;
+}
+.tab:hover { background: #ececec; }
+.tab.active { background: #fff; color: #1a73e8; border-color: #dadce0; }
+
+.panel {
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-top: none;
+}
+
+/* filter bar */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #ebebeb;
+  background: #fafafa;
+}
+.fg { display: flex; align-items: center; gap: 5px; }
+.fg > label:first-child {
+  font-size: 11px; color: #5f6368; white-space: nowrap;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.fg input[type=number] {
+  width: 64px; padding: 4px 6px;
+  border: 1px solid #ccc; border-radius: 4px;
+  font-size: 12px; color: #202124;
+}
+.fg input[type=number]:focus { outline: none; border-color: #1a73e8; }
+.fg input[type=checkbox],
+.fg input[type=radio] { cursor: pointer; }
+.fg .opt { display: flex; align-items: center; gap: 3px; font-size: 12px; color: #3c4043; }
+.filter-sep { color: #dadce0; font-size: 18px; line-height: 1; }
+.btn-reset {
+  padding: 4px 10px; font-size: 11px; font-weight: 500;
+  background: none; border: 1px solid #ccc; border-radius: 4px;
+  cursor: pointer; color: #5f6368;
+  margin-left: auto;
+}
+.btn-reset:hover { background: #f0f0f0; }
+
+/* table */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #f1f3f4;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 2px solid #dadce0;
+  color: #5f6368;
+}
+thead th:hover { background: #e8eaed; color: #202124; }
+thead th.sort-asc  { color: #1a73e8; }
+thead th.sort-asc::after  { content: ' ↑'; }
+thead th.sort-desc { color: #1a73e8; }
+thead th.sort-desc::after { content: ' ↓'; }
+
+tbody td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f1f1f1;
+  white-space: nowrap;
+}
+tbody tr:hover td { background: #f8f9ff; }
+tbody tr:last-child td { border-bottom: none; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.st-il  { color: #c5221f; font-weight: 600; font-size: 11px; }
+.st-na  { color: #e37400; font-weight: 600; font-size: 11px; }
+.st-ok  { color: #188038; font-size: 11px; }
+.av-fa  { color: #188038; font-size: 11px; font-weight: 600; }
+.av-w   { color: #e37400; font-size: 11px; font-weight: 600; }
+
+.name-cell { min-width: 140px; }
+.pos-cell  { color: #5f6368; }
+
+.footer {
+  padding: 6px 14px;
+  font-size: 11px;
+  color: #80868b;
+  border-top: 1px solid #ebebeb;
+  background: #fafafa;
+  display: flex;
+  justify-content: space-between;
+}
+
+.msg { padding: 40px; text-align: center; color: #5f6368; font-size: 14px; }
+.msg.err { color: #c5221f; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fantasy Free Agent Browser</h1>
+  <a href="index.html">← Home</a>
+  <span id="as-of"></span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="batters">Batters</div>
+  <div class="tab"        data-tab="pitchers">Pitchers</div>
+</div>
+
+<div class="panel">
+
+  <!-- batter filters -->
+  <div class="filters" id="filt-batters">
+    <div class="fg"><label>Min AB</label>  <input type="number" id="b-ab"  value="20" min="0" step="5"></div>
+    <div class="fg"><label>Min OBP</label> <input type="number" id="b-obp" value=""   min="0" max="1"   step="0.001" placeholder=".000"></div>
+    <div class="fg"><label>Min HR</label>  <input type="number" id="b-hr"  value=""   min="0" step="1"></div>
+    <div class="fg"><label>Min RBI</label> <input type="number" id="b-rbi" value=""   min="0" step="1"></div>
+    <div class="fg"><label>Min SB</label>  <input type="number" id="b-sb"  value=""   min="0" step="1"></div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Max %Own</label><input type="number" id="b-own" value=""   min="0" max="100" step="1"></div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Pos</label>
+      <label class="opt"><input type="radio" name="b-pos" value=""     checked> Any</label>
+      <label class="opt"><input type="radio" name="b-pos" value="C">    C</label>
+      <label class="opt"><input type="radio" name="b-pos" value="1B">   1B</label>
+      <label class="opt"><input type="radio" name="b-pos" value="2B">   2B</label>
+      <label class="opt"><input type="radio" name="b-pos" value="3B">   3B</label>
+      <label class="opt"><input type="radio" name="b-pos" value="SS">   SS</label>
+      <label class="opt"><input type="radio" name="b-pos" value="OF">   OF</label>
+      <label class="opt"><input type="radio" name="b-pos" value="Util"> Util</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Avail</label>
+      <label class="opt"><input type="radio" name="b-avail" value="FA" checked> FA</label>
+      <label class="opt"><input type="radio" name="b-avail" value="W"> W</label>
+      <label class="opt"><input type="radio" name="b-avail" value=""> Both</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label class="opt"><input type="checkbox" id="b-il" checked> Excl IL/NA</label></div>
+    <button class="btn-reset" id="reset-batters">Reset</button>
+  </div>
+
+  <!-- pitcher filters -->
+  <div class="filters" id="filt-pitchers" style="display:none">
+    <div class="fg"><label>Min IP</label>   <input type="number" id="p-ip"   value="10" min="0" step="5"></div>
+    <div class="fg"><label>Max ERA</label>  <input type="number" id="p-era"  value=""   min="0" max="30"  step="0.1"></div>
+    <div class="fg"><label>Max WHIP</label> <input type="number" id="p-whip" value=""   min="0" max="5"   step="0.01"></div>
+    <div class="fg"><label>Min K</label>    <input type="number" id="p-k"    value=""   min="0" step="1"></div>
+    <div class="fg"><label>Min W</label>    <input type="number" id="p-w"    value=""   min="0" step="1"></div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Max %Own</label> <input type="number" id="p-own"  value=""   min="0" max="100" step="1"></div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Role</label>
+      <label class="opt"><input type="radio" name="p-role" value=""   checked> All</label>
+      <label class="opt"><input type="radio" name="p-role" value="SP"> SP</label>
+      <label class="opt"><input type="radio" name="p-role" value="RP"> RP</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Avail</label>
+      <label class="opt"><input type="radio" name="p-avail" value="FA" checked> FA</label>
+      <label class="opt"><input type="radio" name="p-avail" value="W"> W</label>
+      <label class="opt"><input type="radio" name="p-avail" value=""> Both</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label class="opt"><input type="checkbox" id="p-il" checked> Excl IL/NA</label></div>
+    <button class="btn-reset" id="reset-pitchers">Reset</button>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"><tr><td class="msg" colspan="99">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span id="count-lbl"></span>
+    <span id="sync-lbl"></span>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+const store = { batters: null, pitchers: null };
+let activeTab = 'batters';
+let sortCol   = null;
+let sortDir   = 1;
+
+// ── Column definitions ─────────────────────────────────────────────────────
+
+const COLS = {
+  batters: [
+    { key:'name',    label:'Name',   cls:'name-cell' },
+    { key:'team',    label:'Team' },
+    { key:'pos',     label:'Pos',    cls:'pos-cell' },
+    { key:'status',  label:'Status', fmtClass: statusClass },
+    { key:'avail',   label:'Avail',  fmtClass: availClass },
+    { key:'pct_own', label:'%Own',   cls:'num', fmt: fmtOwn },
+    { key:'ab',      label:'AB',     cls:'num' },
+    { key:'obp',     label:'OBP',    cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+    { key:'r',       label:'R',      cls:'num' },
+    { key:'hr',      label:'HR',     cls:'num' },
+    { key:'rbi',     label:'RBI',    cls:'num' },
+    { key:'sb',      label:'SB',     cls:'num' },
+  ],
+  pitchers: [
+    { key:'name',     label:'Name',  cls:'name-cell' },
+    { key:'team',     label:'Team' },
+    { key:'pos',      label:'Pos',   cls:'pos-cell' },
+    { key:'status',   label:'Status',fmtClass: statusClass },
+    { key:'avail',    label:'Avail', fmtClass: availClass },
+    { key:'pct_own',  label:'%Own',  cls:'num', fmt: fmtOwn },
+    { key:'ip',       label:'IP',    cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+    { key:'w',        label:'W',     cls:'num' },
+    { key:'k',        label:'K',     cls:'num' },
+    { key:'era',      label:'ERA',   cls:'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
+    { key:'whip',     label:'WHIP',  cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+    { key:'sv_holds', label:'SV+H',  cls:'num', fmt: v => v != null ? (+v).toFixed(0) : '' },
+  ],
+};
+
+function fmtOwn(v) { return v != null ? (+v).toFixed(1) + '%' : ''; }
+
+function statusClass(v) {
+  if (!v) return '';
+  if (/^IL/.test(v)) return 'st-il';
+  if (v === 'NA')    return 'st-na';
+  return 'st-ok';
+}
+
+function availClass(v) {
+  if (v === 'FA') return 'av-fa';
+  if (v === 'W')  return 'av-w';
+  return '';
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────
+
+const DEFAULTS = {
+  batters:  { 'b-ab': 20 },
+  pitchers: { 'p-ip': 10 },
+};
+
+function resetFilters(tab) {
+  document.querySelectorAll(`#filt-${tab} input`).forEach(el => {
+    if (el.type === 'checkbox') {
+      el.checked = true;
+      return;
+    }
+    if (el.type === 'radio') {
+      // defaults: FA for avail radios, '' (Any/All) for pos and role radios
+      el.checked = (el.value === 'FA') ||
+                   (el.name === 'b-pos'  && el.value === '') ||
+                   (el.name === 'p-role' && el.value === '');
+      return;
+    }
+    const def = DEFAULTS[tab][el.id];
+    el.value = def !== undefined ? def : '';
+  });
+  render();
+}
+
+function radioVal(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : '';
+}
+
+function getFilters(tab) {
+  const g  = id => { const v = document.getElementById(id).value; return v === '' ? null : +v; };
+  const ck = id => document.getElementById(id).checked;
+
+  if (tab === 'batters') return {
+    ab:     g('b-ab') ?? 0,
+    obp:    g('b-obp'),
+    hr:     g('b-hr'),
+    rbi:    g('b-rbi'),
+    sb:     g('b-sb'),
+    own:    g('b-own'),
+    pos:    radioVal('b-pos'),
+    avail:  radioVal('b-avail'),
+    exclIL: ck('b-il'),
+  };
+  return {
+    ip:     g('p-ip') ?? 0,
+    era:    g('p-era'),
+    whip:   g('p-whip'),
+    k:      g('p-k'),
+    w:      g('p-w'),
+    own:    g('p-own'),
+    role:   radioVal('p-role'),
+    avail:  radioVal('p-avail'),
+    exclIL: ck('p-il'),
+  };
+}
+
+function passes(row, tab, f) {
+  const st = row.status || '';
+  if (f.exclIL && (st === 'NA' || /^IL/.test(st))) return false;
+  if (f.avail && row.avail !== f.avail) return false;
+  if (f.own != null && row.pct_own != null && +row.pct_own > f.own) return false;
+
+  if (tab === 'batters') {
+    if (row.ab == null || +row.ab < f.ab) return false;
+    if (f.obp != null && (row.obp == null || +row.obp < f.obp)) return false;
+    if (f.hr  != null && (row.hr  == null || +row.hr  < f.hr))  return false;
+    if (f.rbi != null && (row.rbi == null || +row.rbi < f.rbi)) return false;
+    if (f.sb  != null && (row.sb  == null || +row.sb  < f.sb))  return false;
+    if (f.pos) {
+      const playerPos = (row.pos || '').split(',').map(p => p.trim());
+      if (!playerPos.includes(f.pos)) return false;
+    }
+  } else {
+    if (row.ip == null || +row.ip < f.ip) return false;
+    if (f.era  != null && (row.era  == null || +row.era  > f.era))  return false;
+    if (f.whip != null && (row.whip == null || +row.whip > f.whip)) return false;
+    if (f.k    != null && (row.k    == null || +row.k    < f.k))    return false;
+    if (f.w    != null && (row.w    == null || +row.w    < f.w))    return false;
+    if (f.role) {
+      const playerPos = (row.pos || '').split(',').map(p => p.trim());
+      if (!playerPos.includes(f.role)) return false;
+    }
+  }
+  return true;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+
+function numVal(v) {
+  if (v === null || v === '') return null;
+  const n = +v;
+  return isNaN(n) ? v : n;
+}
+
+function render() {
+  const tab  = activeTab;
+  const rows = store[tab];
+  if (!rows) return;
+
+  const cols = COLS[tab];
+  const f    = getFilters(tab);
+  let   data = rows.filter(r => passes(r, tab, f));
+
+  if (sortCol !== null && sortCol < cols.length) {
+    const key = cols[sortCol].key;
+    data.sort((a, b) => {
+      const av = numVal(a[key]), bv = numVal(b[key]);
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+  }
+
+  // thead
+  const thead = document.getElementById('thead');
+  thead.innerHTML = '<tr>' + cols.map((c, i) => {
+    const sc = sortCol === i ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    return `<th class="${sc}" data-i="${i}">${c.label}</th>`;
+  }).join('') + '</tr>';
+  thead.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      const i = +th.dataset.i;
+      if (sortCol === i) sortDir *= -1;
+      else { sortCol = i; sortDir = 1; }
+      render();
+    });
+  });
+
+  // tbody
+  const tbody = document.getElementById('tbody');
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="99" class="msg">No players match the current filters.</td></tr>';
+  } else {
+    tbody.innerHTML = data.map(row =>
+      '<tr>' + cols.map(c => {
+        const raw = row[c.key];
+        const val = c.fmt ? c.fmt(raw) : (raw == null ? '' : raw);
+        const tdcls = [c.cls || '', c.fmtClass ? c.fmtClass(raw) : ''].filter(Boolean).join(' ');
+        return `<td class="${tdcls}">${val}</td>`;
+      }).join('') + '</tr>'
+    ).join('');
+  }
+
+  const total = rows.filter(r => f.avail ? r.avail === f.avail : true).length;
+  document.getElementById('count-lbl').textContent =
+    `${data.length.toLocaleString()} of ${total.toLocaleString()} players`;
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────
+
+async function loadTab(tab) {
+  if (store[tab]) { render(); return; }
+
+  document.getElementById('tbody').innerHTML =
+    '<tr><td colspan="99" class="msg">Loading…</td></tr>';
+  document.getElementById('count-lbl').textContent = '';
+
+  try {
+    const resp = await fetch(`api.php?type=${tab}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    if (json.error) throw new Error(json.error);
+    store[tab] = json;
+    render();
+  } catch (e) {
+    document.getElementById('tbody').innerHTML =
+      `<tr><td colspan="99" class="msg err">Error: ${e.message}</td></tr>`;
+    document.getElementById('count-lbl').textContent = '';
+  }
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    if (t.dataset.tab === activeTab) return;
+    activeTab = t.dataset.tab;
+    sortCol = null; sortDir = 1;
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('filt-batters').style.display  = activeTab === 'batters'  ? 'flex' : 'none';
+    document.getElementById('filt-pitchers').style.display = activeTab === 'pitchers' ? 'flex' : 'none';
+    loadTab(activeTab);
+  });
+});
+
+// ── Filter listeners ───────────────────────────────────────────────────────
+
+document.querySelectorAll('.filters input').forEach(el => {
+  el.addEventListener('input',  render);
+  el.addEventListener('change', render);
+});
+document.getElementById('reset-batters').addEventListener('click',  () => resetFilters('batters'));
+document.getElementById('reset-pitchers').addEventListener('click', () => resetFilters('pitchers'));
+
+// ── Sync timestamp ─────────────────────────────────────────────────────────
+
+fetch('api.php?type=meta')
+  .then(r => r.json())
+  .then(m => {
+    if (m.batter_sync) document.getElementById('as-of').textContent = `Batters as of ${m.batter_sync}`;
+    document.getElementById('sync-lbl').textContent =
+      `B sync: ${m.batter_sync || 'n/a'} · P sync: ${m.pitcher_sync || 'n/a'}`;
+  })
+  .catch(() => {});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+
+loadTab('batters');
+</script>
+</body>
+</html>
