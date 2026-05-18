@@ -19,11 +19,14 @@ header {
   color: #fff;
   padding: 10px 16px;
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
 }
 header h1 { font-size: 17px; font-weight: 600; }
+header .spacer { flex: 1; }
 header span { font-size: 12px; opacity: 0.8; }
+header a { color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+header a:hover { text-decoration: underline; }
 
 .tabs {
   display: flex;
@@ -125,6 +128,10 @@ tbody tr:last-child td { border-bottom: none; }
 .name-cell { min-width: 140px; }
 .pos-cell  { color: #5f6368; }
 
+tbody td a { color: #1a73e8; text-decoration: none; }
+tbody td a:hover { text-decoration: underline; }
+.stats-link { font-size: 11px; color: #5f6368; }
+
 .footer {
   padding: 6px 14px;
   font-size: 11px;
@@ -143,8 +150,9 @@ tbody tr:last-child td { border-bottom: none; }
 
 <header>
   <h1>Fantasy Free Agent Browser</h1>
-  <a href="index.html">← Home</a>
+  <div class="spacer"></div>
   <span id="as-of"></span>
+  <a href="index.html">&#8592; Home</a>
 </header>
 
 <div class="tabs">
@@ -232,17 +240,38 @@ tbody tr:last-child td { border-bottom: none; }
 <script>
 'use strict';
 
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setCookie(name, value) {
+  const exp = new Date();
+  exp.setFullYear(exp.getFullYear() + 1);
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + exp.toUTCString() + '; path=/';
+}
+
 const store = { batters: null, pitchers: null };
-let activeTab = 'batters';
+const savedTab = getCookie('players_tab');
+let activeTab = (savedTab === 'pitchers') ? 'pitchers' : 'batters';
 let sortCol   = null;
 let sortDir   = 1;
+
+// Apply saved tab state to DOM before first render.
+if (activeTab === 'pitchers') {
+  document.querySelectorAll('.tab').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === 'pitchers');
+  });
+  document.getElementById('filt-batters').style.display  = 'none';
+  document.getElementById('filt-pitchers').style.display = 'flex';
+}
 
 // ── Column definitions ─────────────────────────────────────────────────────
 
 const COLS = {
   batters: [
-    { key:'name',    label:'Name',   cls:'name-cell' },
-    { key:'team',    label:'Team' },
+    { key:'name',       label:'Name',  cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+    { key:'player_key', label:'',      noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'team',       label:'Team' },
     { key:'pos',     label:'Pos',    cls:'pos-cell' },
     { key:'status',  label:'Status', fmtClass: statusClass },
     { key:'avail',   label:'Avail',  fmtClass: availClass },
@@ -255,8 +284,9 @@ const COLS = {
     { key:'sb',      label:'SB',     cls:'num' },
   ],
   pitchers: [
-    { key:'name',     label:'Name',  cls:'name-cell' },
-    { key:'team',     label:'Team' },
+    { key:'name',       label:'Name', cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+    { key:'player_key', label:'',     noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'team',       label:'Team' },
     { key:'pos',      label:'Pos',   cls:'pos-cell' },
     { key:'status',   label:'Status',fmtClass: statusClass },
     { key:'avail',    label:'Avail', fmtClass: availClass },
@@ -269,6 +299,10 @@ const COLS = {
     { key:'sv_holds', label:'SV+H',  cls:'num', fmt: v => v != null ? (+v).toFixed(0) : '' },
   ],
 };
+
+function pid(key) { return key ? key.split('.').pop() : ''; }
+function addLink(name, key)  { return `<a href="https://baseball.fantasysports.yahoo.com/b1/73362/addplayer?apid=${pid(key)}" target="_blank" rel="noopener">${name}</a>`; }
+function statsLink(key) { return `<a class="stats-link" href="https://sports.yahoo.com/mlb/players/${pid(key)}/" target="_blank" rel="noopener">stats</a>`; }
 
 function fmtOwn(v) { return v != null ? (+v).toFixed(1) + '%' : ''; }
 
@@ -406,11 +440,13 @@ function render() {
   const thead = document.getElementById('thead');
   thead.innerHTML = '<tr>' + cols.map((c, i) => {
     const sc = sortCol === i ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
-    return `<th class="${sc}" data-i="${i}">${c.label}</th>`;
+    const cursor = c.noSort ? 'style="cursor:default"' : '';
+    return `<th class="${sc}" data-i="${i}" ${cursor}>${c.label}</th>`;
   }).join('') + '</tr>';
   thead.querySelectorAll('th').forEach(th => {
     th.addEventListener('click', () => {
       const i = +th.dataset.i;
+      if (cols[i].noSort) return;
       if (sortCol === i) sortDir *= -1;
       else { sortCol = i; sortDir = 1; }
       render();
@@ -425,7 +461,7 @@ function render() {
     tbody.innerHTML = data.map(row =>
       '<tr>' + cols.map(c => {
         const raw = row[c.key];
-        const val = c.fmt ? c.fmt(raw) : (raw == null ? '' : raw);
+        const val = c.fmt ? c.fmt(raw, row) : (raw == null ? '' : raw);
         const tdcls = [c.cls || '', c.fmtClass ? c.fmtClass(raw) : ''].filter(Boolean).join(' ');
         return `<td class="${tdcls}">${val}</td>`;
       }).join('') + '</tr>'
@@ -466,6 +502,7 @@ document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
     if (t.dataset.tab === activeTab) return;
     activeTab = t.dataset.tab;
+    setCookie('players_tab', activeTab);
     sortCol = null; sortDir = 1;
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
@@ -497,7 +534,7 @@ fetch('api.php?type=meta')
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
-loadTab('batters');
+loadTab(activeTab);
 </script>
 </body>
 </html>

@@ -7,7 +7,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 13px;
   background: #e8eaed;
   color: #202124;
@@ -18,14 +18,18 @@ header {
   background: #1a73e8;
   color: #fff;
   padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 header h1 { font-size: 17px; font-weight: 600; }
+header .spacer { flex: 1; }
 
 .cards {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  padding: 24px 16px;
+  padding: 24px 16px 16px;
 }
 
 .card {
@@ -44,12 +48,47 @@ header h1 { font-size: 17px; font-weight: 600; }
 }
 .card h2 { font-size: 15px; font-weight: 600; color: #1a73e8; margin-bottom: 6px; }
 .card p  { font-size: 12px; color: #5f6368; line-height: 1.5; }
+
+#sync-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#sync-btn:hover:not(:disabled) { background: rgba(255,255,255,0.35); }
+#sync-btn:disabled { opacity: 0.55; cursor: default; }
+
+#sync-drawer {
+  display: none;
+  margin: 0 16px 16px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 14px 16px;
+  max-height: 340px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+#sync-drawer.open { display: block; }
+
+.sync-done  { color: #4ec9b0; font-weight: 700; }
+.sync-error { color: #f48771; font-weight: 700; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Fantasy Tools</h1>
+  <div class="spacer"></div>
+  <button id="sync-btn">Sync Data</button>
 </header>
 
 <div class="cards">
@@ -63,5 +102,53 @@ header h1 { font-size: 17px; font-weight: 600; }
   </a>
 </div>
 
+<div id="sync-drawer"></div>
+
+<script>
+"use strict";
+
+const btn    = document.getElementById("sync-btn");
+const drawer = document.getElementById("sync-drawer");
+
+btn.addEventListener("click", function () {
+  if (btn.disabled) return;
+
+  btn.disabled = true;
+  btn.textContent = "Syncing…";
+  drawer.textContent = "";
+  drawer.className = "open";
+
+  const es = new EventSource("sync.php");
+
+  es.addEventListener("line", function (e) {
+    const text = JSON.parse(e.data);
+    drawer.textContent += text + "\n";
+    drawer.scrollTop = drawer.scrollHeight;
+  });
+
+  es.addEventListener("done", function () {
+    es.close();
+    const span = document.createElement("span");
+    span.className = "sync-done";
+    span.textContent = "✔ Sync complete";
+    drawer.appendChild(span);
+    drawer.scrollTop = drawer.scrollHeight;
+    btn.disabled = false;
+    btn.textContent = "Sync Data";
+  });
+
+  es.addEventListener("error", function (e) {
+    es.close();
+    const msg = e.data ? JSON.parse(e.data) : "Connection lost";
+    const span = document.createElement("span");
+    span.className = "sync-error";
+    span.textContent = "✖ " + msg;
+    drawer.appendChild(span);
+    drawer.scrollTop = drawer.scrollHeight;
+    btn.disabled = false;
+    btn.textContent = "Sync Data";
+  });
+});
+</script>
 </body>
 </html>

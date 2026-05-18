@@ -22,13 +22,13 @@ from fantasy.utils import format_snapshot_timestamp, utc_now, write_csv
 from fantasy.yahoo_client import YahooFantasyClient
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync Yahoo Fantasy free-agent batters with season stats.")
     parser.add_argument("--league-key", help="Yahoo league key. If omitted, auto-discover from your current MLB leagues.")
-    parser.add_argument("--statuses", default="FA,W", help="Comma-separated availability statuses to pull. Default: FA,W")
+    parser.add_argument("--statuses", default="FA,W,T", help="Comma-separated availability statuses to pull. Default: FA,W,T")
     parser.add_argument("--page-size", type=int, default=25, help="Yahoo pagination count. Default: 25")
     parser.add_argument("--dry-run", action="store_true", help="Fetch and write CSV but do not write to MariaDB.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def choose_league(requested_key: str | None, discovered_leagues: list[dict]) -> dict:
@@ -51,8 +51,8 @@ def choose_league(requested_key: str | None, discovered_leagues: list[dict]) -> 
     )
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     settings = load_settings()
     client = YahooFantasyClient(settings)
 

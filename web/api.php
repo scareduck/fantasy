@@ -12,6 +12,15 @@ if ($conn->connect_error) {
 }
 $conn->set_charset('utf8mb4');
 
+if ($type === 'teams') {
+    $result = $conn->query("SELECT DISTINCT team_key, team_name FROM current_roster ORDER BY team_name");
+    $rows = [];
+    while ($row = $result->fetch_assoc()) $rows[] = $row;
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 if ($type === 'meta') {
     $brow = $conn->query("SELECT started_at_utc FROM sync_run WHERE requested_position='B' ORDER BY sync_run_id DESC LIMIT 1")->fetch_assoc();
     $prow = $conn->query("SELECT started_at_utc FROM sync_run WHERE requested_position='P' ORDER BY sync_run_id DESC LIMIT 1")->fetch_assoc();
@@ -149,6 +158,7 @@ if ($type === 'pitchers') {
     $sql = "
         SELECT
             p.full_name                              AS name,
+            p.yahoo_player_key                       AS player_key,
             p.editorial_team_abbr                    AS team,
             p.display_position                       AS pos,
             COALESCE(p.yahoo_status, '')              AS status,
@@ -170,6 +180,7 @@ if ($type === 'pitchers') {
     $sql = "
         SELECT
             p.full_name                              AS name,
+            p.yahoo_player_key                       AS player_key,
             p.editorial_team_abbr                    AS team,
             p.display_position                       AS pos,
             COALESCE(p.yahoo_status, '')              AS status,

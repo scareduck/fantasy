@@ -1,0 +1,18 @@
+One-time setup: allow Apache to run the data-sync script as rlm.
+
+1. Create the sudoers drop-in:
+
+    sudo tee /etc/sudoers.d/fantasy-web <<'EOF'
+    Defaults:apache !requiretty
+    apache ALL=(rlm) NOPASSWD: /home/rlm/src/fantasy/web/sync.sh
+    EOF
+
+2. Lock down the file permissions (required by sudo):
+
+    sudo chmod 440 /etc/sudoers.d/fantasy-web
+
+3. Verify syntax (optional but safe):
+
+    sudo visudo -c -f /etc/sudoers.d/fantasy-web
+
+That's it.  The Sync Data button on the home page will now work.

@@ -23,7 +23,7 @@ header {
   gap: 14px;
 }
 header h1 { font-size: 17px; font-weight: 600; }
-header a  { color: rgba(255,255,255,0.8); font-size: 12px; text-decoration: none; }
+header a  { color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
 header a:hover { text-decoration: underline; }
 header .spacer { flex: 1; }
 header .period { font-size: 12px; opacity: 0.75; }
@@ -118,10 +118,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <header>
   <h1>Lineup Helper</h1>
-  <select id="team-select">
-    <option value="469.l.73362.t.8">Miskatonic Cthulhus</option>
-    <option value="469.l.73362.t.10">Tinker Evers&rsquo; Chance</option>
-  </select>
+  <select id="team-select"></select>
   <div class="spacer"></div>
   <span class="period" id="period"></span>
   <a href="index.html">&#8592; Home</a>
@@ -147,6 +144,19 @@ tbody tr:last-child td { border-bottom: none; }
 
 // cache[tab][team_key] = rows
 const cache = { starts: {}, matchups: {} };
+
+// Teams whose selection should be remembered across visits.
+const OUR_TEAMS = ["469.l.73362.t.8", "469.l.73362.t.10"];
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setCookie(name, value) {
+  const exp = new Date();
+  exp.setFullYear(exp.getFullYear() + 1);
+  document.cookie = name + "=" + encodeURIComponent(value) + "; expires=" + exp.toUTCString() + "; path=/";
+}
 
 let activeTab  = "starts";
 let activeTeam = "469.l.73362.t.8";
@@ -285,10 +295,38 @@ document.querySelectorAll(".tab").forEach(function(t) {
 
 document.getElementById("team-select").addEventListener("change", function() {
   activeTeam = this.value;
+  if (OUR_TEAMS.indexOf(activeTeam) !== -1) setCookie("fantasy_team", activeTeam);
   load();
 });
 
-load();
+// Populate team dropdown from DB, then load data.
+fetch("api.php?type=teams")
+  .then(function(r) { return r.json(); })
+  .then(function(teams) {
+    const sel = document.getElementById("team-select");
+    const ours   = teams.filter(function(t) { return OUR_TEAMS.indexOf(t.team_key) !== -1; });
+    const others = teams.filter(function(t) { return OUR_TEAMS.indexOf(t.team_key) === -1; });
+
+    function addGroup(label, list) {
+      const g = document.createElement("optgroup");
+      g.label = label;
+      list.forEach(function(t) {
+        const o = document.createElement("option");
+        o.value = t.team_key;
+        o.textContent = t.team_name;
+        g.appendChild(o);
+      });
+      sel.appendChild(g);
+    }
+    addGroup("Our Teams", ours);
+    addGroup("Other Teams", others);
+
+    const saved = getCookie("fantasy_team");
+    if (saved && OUR_TEAMS.indexOf(saved) !== -1) activeTeam = saved;
+    sel.value = activeTeam;
+    load();
+  })
+  .catch(function() { load(); });
 </script>
 </body>
 </html>
