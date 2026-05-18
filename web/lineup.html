@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lineup Helper</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  background: #e8eaed;
+  color: #202124;
+  min-height: 100vh;
+}
+
+header {
+  background: #1a73e8;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+header h1 { font-size: 17px; font-weight: 600; }
+header a { color: rgba(255,255,255,0.8); font-size: 12px; text-decoration: none; }
+header a:hover { text-decoration: underline; }
+header .period { font-size: 12px; opacity: 0.8; margin-left: auto; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.team-panel {
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.team-header {
+  background: #f1f3f4;
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  border-bottom: 2px solid #dadce0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.team-header .total-label { font-size: 11px; color: #5f6368; font-weight: 400; }
+.team-header .total-val   { font-size: 13px; font-weight: 700; color: #1a73e8; }
+
+table { width: 100%; border-collapse: collapse; }
+th {
+  background: #f8f9fa;
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  color: #5f6368;
+  border-bottom: 1px solid #dadce0;
+  white-space: nowrap;
+}
+th.num { text-align: right; }
+
+td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f1f1f1;
+  vertical-align: top;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #f8f9ff; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.name-cell { min-width: 130px; font-weight: 500; }
+.mlb-team  { color: #5f6368; font-size: 11px; }
+
+/* roster position badges */
+.rpos {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.rpos-sp   { background: #e8f0fe; color: #1a73e8; }
+.rpos-rp   { background: #e6f4ea; color: #137333; }
+.rpos-p    { background: #e6f4ea; color: #137333; }
+.rpos-bn   { background: #f1f3f4; color: #5f6368; }
+.rpos-il   { background: #fce8e6; color: #c5221f; }
+
+/* injury status */
+.st-il { color: #c5221f; font-size: 10px; font-weight: 600; }
+.st-na { color: #e37400; font-size: 10px; font-weight: 600; }
+
+/* starts list */
+.starts { font-size: 11px; line-height: 1.7; }
+.start-line { white-space: nowrap; }
+.fpts-val { color: #1a73e8; font-weight: 600; }
+.no-starts { color: #bbb; font-size: 11px; font-style: italic; }
+
+.fpts-total { font-weight: 700; color: #1a73e8; }
+.fpts-zero  { color: #bbb; }
+
+.msg { padding: 40px; text-align: center; color: #5f6368; font-size: 14px; }
+.msg.err { color: #c5221f; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Lineup Helper</h1>
+  <a href="index.html">← FA Browser</a>
+  <span class="period" id="period"></span>
+</header>
+
+<div class="grid" id="grid">
+  <div class="msg">Loading…</div>
+</div>
+
+<script>
+'use strict';
+
+const MY_TEAM_KEY  = ‘469.l.73362.t.8’;   // Miskatonic Cthulhus
+const HER_TEAM_KEY = ‘469.l.73362.t.10’;  // Tinker Evers’ Chance
+
+function rposClass(pos) {
+  if (!pos) return '';
+  const p = pos.toUpperCase();
+  if (p === 'SP') return 'rpos rpos-sp';
+  if (p === 'RP') return 'rpos rpos-rp';
+  if (p === 'P')  return 'rpos rpos-p';
+  if (p === 'IL') return 'rpos rpos-il';
+  return 'rpos rpos-bn';
+}
+
+function statusBadge(s) {
+  if (!s) return '';
+  if (/^IL/.test(s)) return ` <span class="st-il">${s}</span>`;
+  if (s === 'NA')    return ` <span class="st-na">NA</span>`;
+  return '';
+}
+
+function buildStartsHtml(matchups, projections) {
+  if (!matchups) return '<span class="no-starts">no starts</span>';
+  const ms = matchups.split('|');
+  const ps = projections ? projections.split('|') : [];
+  return '<div class="starts">' + ms.map((m, i) => {
+    const pts = ps[i] != null ? parseFloat(ps[i]).toFixed(1) : '?';
+    return `<div class="start-line">${m} <span class="fpts-val">${pts}</span></div>`;
+  }).join('') + '</div>';
+}
+
+function buildTable(players) {
+  if (!players.length) return '<p class="msg">No pitchers found.</p>';
+
+  const activeFpts = players
+    .filter(p => p.roster_pos !== 'IL')
+    .reduce((s, p) => s + p.total_fpts, 0);
+
+  const rows = players.map(p => {
+    const fptsHtml = p.total_fpts > 0
+      ? `<span class="fpts-total">${p.total_fpts.toFixed(1)}</span>`
+      : `<span class="fpts-zero">—</span>`;
+    return `<tr>
+      <td class="name-cell">${p.name}${statusBadge(p.status)}</td>
+      <td class="mlb-team">${p.mlb_team || ''}</td>
+      <td><span class="${rposClass(p.roster_pos)}">${p.roster_pos}</span></td>
+      <td>${buildStartsHtml(p.matchups, p.projections)}</td>
+      <td class="num">${fptsHtml}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="team-header">
+      <span>${players[0].team_name}</span>
+      <span>
+        <span class="total-label">active starters&nbsp;</span>
+        <span class="total-val">${activeFpts.toFixed(1)} FPTS</span>
+      </span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Pitcher</th><th>Team</th><th>Pos</th><th>Starts</th><th class="num">FPTS</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function load() {
+  const grid = document.getElementById('grid');
+  try {
+    const resp = await fetch('api.php?type=lineup');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    const period = data.find(r => r.period)?.period;
+    if (period) document.getElementById('period').textContent = period;
+
+    const mine  = data.filter(r => r.team_key === MY_TEAM_KEY);
+    const hers  = data.filter(r => r.team_key === HER_TEAM_KEY);
+
+    grid.innerHTML =
+      `<div class="team-panel">${buildTable(mine)}</div>` +
+      `<div class="team-panel">${buildTable(hers)}</div>`;
+  } catch (e) {
+    grid.innerHTML = `<div class="msg err">Error: ${e.message}</div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

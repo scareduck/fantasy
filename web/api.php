@@ -23,6 +23,42 @@ if ($type === 'meta') {
     exit;
 }
 
+if ($type === 'lineup') {
+    $sql = "
+        SELECT
+            cr.team_key,
+            cr.team_name,
+            p.full_name                                                              AS name,
+            p.editorial_team_abbr                                                    AS mlb_team,
+            cr.selected_position                                                     AS roster_pos,
+            COALESCE(p.yahoo_status, '')                                             AS status,
+            GROUP_CONCAT(ef.matchup_text    ORDER BY ef.matchup_text SEPARATOR '|') AS matchups,
+            GROUP_CONCAT(ef.projection_text ORDER BY ef.matchup_text SEPARATOR '|') AS projections,
+            CAST(COALESCE(SUM(CAST(ef.projection_text AS DECIMAL(6,1))), 0)
+                 AS DECIMAL(6,1))                                                    AS total_fpts,
+            COUNT(ef.espn_forecaster_snapshot_id)                                   AS start_count,
+            MAX(ef.forecaster_for_date)                                             AS period
+        FROM current_roster cr
+        JOIN player p ON p.player_id = cr.player_id
+        LEFT JOIN current_espn_forecast ef ON ef.player_id = cr.player_id
+        WHERE p.position_type = 'P'
+        GROUP BY cr.team_key, cr.team_name, p.player_id, p.full_name, p.editorial_team_abbr,
+                 cr.selected_position, p.yahoo_status
+        ORDER BY cr.team_name, total_fpts DESC
+    ";
+    $result = $conn->query($sql);
+    if (!$result) { http_response_code(500); echo json_encode(['error' => $conn->error]); exit; }
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['total_fpts']  = (float)$row['total_fpts'];
+        $row['start_count'] = (int)$row['start_count'];
+        $rows[] = $row;
+    }
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 if ($type === 'pitchers') {
     // current_availability = MAX sync_run from player_availability_snapshot (latest P run)
     // current_pitcher_stats = MAX sync_run from pitcher_season_stats
