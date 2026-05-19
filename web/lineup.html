@@ -278,7 +278,10 @@ async function load() {
 fetch("api.php?type=meta")
   .then(function(r) { return r.json(); })
   .then(function(m) {
-    if (m.pitcher_sync) document.getElementById("period").textContent = m.pitcher_sync;
+    const parts = [];
+    if (m.batter_sync)  parts.push("B: " + m.batter_sync);
+    if (m.pitcher_sync) parts.push("P: " + m.pitcher_sync);
+    if (parts.length) document.getElementById("period").textContent = parts.join(" · ");
   })
   .catch(function() {});
 
