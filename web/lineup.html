@@ -203,6 +203,7 @@ const COLS = {
       fmt: (v, r) => slotBadge(r.slot, "slot-bat") },
     { label: "Opp Pitcher", key: "opp_pitcher",
       fmt: (v)    => v || `<span class="fpts-none">off day</span>` },
+    { label: "MLB",         key: "pitcher_team" },
     { label: "Matchup",     key: "matchup",  fmt: v => v || "" },
     { label: "Opp FPTS",    key: "fpts",     cls: "num",
       fmt: (v)    => `<span class="${fptsCls(v)}">${v !== null ? v.toFixed(1) : "&#8212;"}</span>` },
