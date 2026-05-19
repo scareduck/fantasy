@@ -105,6 +105,9 @@ tbody tr:last-child td { border-bottom: none; }
 .era-good  { color: #137333; }
 .era-bad   { color: #c5221f; }
 
+tbody td a { color: inherit; text-decoration: none; }
+tbody td a:hover { text-decoration: underline; }
+
 .footer {
   padding: 6px 14px; font-size: 11px; color: #80868b;
   border-top: 1px solid #ebebeb; background: #fafafa;
@@ -163,6 +166,13 @@ let activeTeam = "469.l.73362.t.8";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+function pid(key) { return key ? key.split(".").pop() : ""; }
+function ylink(name, key) {
+  const id = pid(key);
+  if (!id) return name;
+  return `<a href="https://sports.yahoo.com/mlb/players/${id}/" target="_blank" rel="noopener">${name}</a>`;
+}
+
 function fptsCls(v) {
   if (v === null) return "fpts-none";
   if (v >= 10)   return "fpts-hi";
@@ -188,7 +198,7 @@ const COLS = {
   starts: [
     { label: "Date",    key: "start_date",
       fmt: (v)    => fmtDate(v) },
-    { label: "Pitcher", key: "name" },
+    { label: "Pitcher", key: "name", fmt: (v, r) => ylink(v, r.player_key) },
     { label: "MLB",     key: "mlb_team" },
     { label: "Slot",    key: "slot",
       fmt: (v, r) => slotBadge(r.slot, r.slot === "SP" ? "slot-sp" : "slot-bn") },
@@ -197,12 +207,12 @@ const COLS = {
       fmt: (v)    => `<span class="${fptsCls(v)}">${v !== null ? v.toFixed(1) : "no game"}</span>` },
   ],
   matchups: [
-    { label: "Batter",      key: "batter" },
+    { label: "Batter",      key: "batter", fmt: (v, r) => ylink(v, r.player_key) },
     { label: "Team",        key: "batter_team" },
     { label: "Slot",        key: "slot",
       fmt: (v, r) => slotBadge(r.slot, "slot-bat") },
     { label: "Opp Pitcher", key: "opp_pitcher",
-      fmt: (v)    => v || `<span class="fpts-none">off day</span>` },
+      fmt: (v, r) => v ? ylink(v, r.opp_player_key) : `<span class="fpts-none">off day</span>` },
     { label: "MLB",         key: "pitcher_team" },
     { label: "Matchup",     key: "matchup",  fmt: v => v || "" },
     { label: "Opp FPTS",    key: "fpts",     cls: "num",

@@ -53,6 +53,7 @@ if ($type === 'starts') {
                 ), '%Y-%m-%d'
             )                                           AS start_date,
             p.full_name                                 AS name,
+            p.yahoo_player_key                          AS player_key,
             p.editorial_team_abbr                       AS mlb_team,
             cr.selected_position                        AS slot,
             efs.matchup_text                            AS start,
@@ -85,9 +86,11 @@ if ($type === 'matchups') {
     $stmt = $conn->prepare("
         SELECT
             p.full_name                                 AS batter,
+            p.yahoo_player_key                          AS player_key,
             p.editorial_team_abbr                       AS batter_team,
             cr.selected_position                        AS slot,
             opp.pitcher_name                            AS opp_pitcher,
+            opp_p.yahoo_player_key                      AS opp_player_key,
             opp.team_abbr                               AS pitcher_team,
             opp.matchup_text                            AS matchup,
             CAST(opp.projection_text AS DECIMAL(6,2))   AS fpts,
@@ -98,11 +101,13 @@ if ($type === 'matchups') {
             ON  opp.opponent_team_abbr = p.editorial_team_abbr
             AND opp.matchup_text LIKE CONCAT('%', MONTH(CURDATE()), '/', DAY(CURDATE()), '%')
             AND opp.projection_text IS NOT NULL
+        LEFT JOIN player opp_p ON opp_p.player_id = opp.player_id
         LEFT JOIN current_pitcher_stats cps ON cps.player_id = opp.player_id
         WHERE p.position_type = 'B'
           AND cr.selected_position != 'IL'
           AND cr.team_key = ?
-        ORDER BY fpts DESC
+        ORDER BY FIELD(cr.selected_position, 'C','1B','2B','3B','SS','OF','Util','BN'),
+                 fpts DESC
     ");
     $stmt->bind_param('s', $team_key);
     $stmt->execute();
