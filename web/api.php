@@ -32,13 +32,16 @@ if ($type === 'meta') {
     exit;
 }
 
-// Resolve team_key from ?team= param; defaults to Rob's team.
-$TEAMS = [
-    '469.l.73362.t.8'  => 'Miskatonic Cthulhus',
-    '469.l.73362.t.10' => "Tinker Evers\u{2019} Chance",
-];
-$team_key = isset($_GET['team']) && array_key_exists($_GET['team'], $TEAMS)
-    ? $_GET['team'] : '469.l.73362.t.8';
+// Resolve team_key from ?team= param; validate against DB, default to Rob's team.
+$team_key = '469.l.73362.t.8';
+if (isset($_GET['team'])) {
+    $candidate = $_GET['team'];
+    $chk = $conn->prepare("SELECT 1 FROM current_roster WHERE team_key = ? LIMIT 1");
+    $chk->bind_param('s', $candidate);
+    $chk->execute();
+    if ($chk->get_result()->num_rows > 0) $team_key = $candidate;
+    $chk->close();
+}
 
 if ($type === 'starts') {
     $stmt = $conn->prepare("
