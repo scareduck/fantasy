@@ -191,6 +191,10 @@ if ($type === 'sp1' || $type === 'sp2') {
             SELECT player_id, $subq_cols
             FROM current_espn_forecast
             WHERE player_id IS NOT NULL
+              AND STR_TO_DATE(
+                    CONCAT(SUBSTRING_INDEX(matchup_text, '-', 1), ' ', YEAR(CURDATE())),
+                    '%a %c/%e %Y'
+                  ) >= CURDATE()
             GROUP BY player_id
             $having
         ) agg ON agg.player_id = ca.player_id
