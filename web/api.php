@@ -160,7 +160,9 @@ if ($type === 'lineup') {
 }
 
 if ($type === 'sp1' || $type === 'sp2') {
-    $having   = $type === 'sp1' ? 'HAVING COUNT(*) = 1' : 'HAVING COUNT(*) >= 2';
+    $having   = $type === 'sp1'
+        ? 'HAVING COUNT(*) = 1 AND CAST(MIN(projection_text) AS DECIMAL(6,2)) >= 9'
+        : 'HAVING COUNT(*) >= 2 AND ROUND(SUM(CAST(projection_text AS DECIMAL(6,2))), 1) >= 18';
     if ($type === 'sp1') {
         $subq_cols  = "MIN(matchup_text) AS matchup,
                        CAST(MIN(projection_text) AS DECIMAL(6,2)) AS fpts";
