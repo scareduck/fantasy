@@ -313,6 +313,20 @@ CREATE TABLE IF NOT EXISTS pitcher_season_stats (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS pitcher_game_log (
+    pitcher_game_log_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    player_id BIGINT UNSIGNED NOT NULL,
+    game_date DATE NOT NULL,
+    sv_holds DECIMAL(6,2) NOT NULL DEFAULT 0,
+    captured_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (pitcher_game_log_id),
+    KEY idx_pitcher_game_log_player_date (player_id, game_date),
+    KEY idx_pitcher_game_log_date (game_date),
+    CONSTRAINT fk_pitcher_game_log_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Current roster: the most recent roster snapshot across all teams.
 CREATE OR REPLACE VIEW current_roster AS
 SELECT

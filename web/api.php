@@ -12,6 +12,64 @@ if ($conn->connect_error) {
 }
 $conn->set_charset('utf8mb4');
 
+if ($type === 'svh') {
+    // Validate optional team filter against live roster data.
+    $filter_team = null;
+    if (isset($_GET['team']) && $_GET['team'] !== '' && $_GET['team'] !== 'all') {
+        $chk = $conn->prepare("SELECT 1 FROM current_roster WHERE team_key = ? LIMIT 1");
+        $chk->bind_param('s', $_GET['team']);
+        $chk->execute();
+        if ($chk->get_result()->num_rows > 0) $filter_team = $_GET['team'];
+        $chk->close();
+    }
+    $team_clause = $filter_team
+        ? " AND cr.team_key = '" . $conn->real_escape_string($filter_team) . "'"
+        : "";
+
+    $sql = "
+        SELECT
+            p.full_name                                     AS name,
+            p.yahoo_player_key                              AS player_key,
+            p.editorial_team_abbr                           AS team,
+            CAST(cps.sv_holds AS UNSIGNED)                  AS season_svh,
+            MAX(pgl.game_date)                              AS last_svh_date,
+            DATEDIFF(CURDATE(), MAX(pgl.game_date))         AS days_since,
+            COALESCE(ca.availability_status, 'T')           AS avail_status,
+            cr.team_key                                     AS fantasy_team_key,
+            cr.team_name                                    AS fantasy_team_name
+        FROM current_pitcher_stats cps
+        JOIN  player p ON p.player_id = cps.player_id
+        LEFT JOIN pitcher_game_log pgl ON pgl.player_id = cps.player_id
+        LEFT JOIN (
+            SELECT player_id, MAX(availability_status) AS availability_status
+            FROM   current_availability
+            GROUP BY player_id
+        ) ca ON ca.player_id = cps.player_id
+        LEFT JOIN current_roster cr ON cr.player_id = cps.player_id
+        WHERE cps.sv_holds >= 1
+        $team_clause
+        GROUP BY
+            p.player_id, p.full_name, p.editorial_team_abbr,
+            p.yahoo_player_key, cps.sv_holds, ca.availability_status,
+            cr.team_key, cr.team_name
+        ORDER BY
+            CASE WHEN MAX(pgl.game_date) IS NULL THEN 1 ELSE 0 END,
+            DATEDIFF(CURDATE(), MAX(pgl.game_date)),
+            cps.sv_holds DESC
+    ";
+    $result = $conn->query($sql);
+    if (!$result) { http_response_code(500); echo json_encode(['error' => $conn->error]); exit; }
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['season_svh'] = $row['season_svh'] !== null ? (int)$row['season_svh'] : null;
+        $row['days_since'] = $row['days_since'] !== null ? (int)$row['days_since'] : null;
+        $rows[] = $row;
+    }
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 if ($type === 'teams') {
     $result = $conn->query("SELECT DISTINCT team_key, team_name FROM current_roster ORDER BY team_name");
     $rows = [];

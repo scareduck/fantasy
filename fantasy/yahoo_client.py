@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -24,19 +25,37 @@ class YahooFantasyClient:
         self.session = requests.Session()
         self.auth = YahooAuth(settings, self.session)
 
-    def get_xml(self, path: str) -> YahooResponse:
-        token = self.auth.get_valid_token()
+    def get_xml(self, path: str, *, retries: int = 5, backoff: float = 20.0) -> YahooResponse:
         url = f"{BASE_URL}/{path.lstrip('/')}"
-        response = self.session.get(
-            url,
-            headers={
-                "Authorization": f"Bearer {token.access_token}",
-                "Accept": "application/xml",
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        return YahooResponse(url=url, body=response.text)
+        last_err: Exception = RuntimeError("No attempts made")
+        for attempt in range(retries):
+            if attempt:
+                delay = backoff * attempt
+                print(f"  [retry {attempt}/{retries-1}] waiting {delay:.0f}s: {url}")
+                time.sleep(delay)
+            try:
+                token = self.auth.get_valid_token()
+                response = self.session.get(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {token.access_token}",
+                        "Accept": "application/xml",
+                    },
+                    timeout=60,
+                )
+                response.raise_for_status()
+                body = response.text
+                if body.strip().startswith("<"):
+                    return YahooResponse(url=url, body=body)
+                last_err = RuntimeError(f"Non-XML response: {body[:120]!r}")
+                print(f"  [attempt {attempt+1}] non-XML response from Yahoo, will retry")
+            except requests.HTTPError as exc:
+                last_err = exc
+                print(f"  [attempt {attempt+1}] HTTP {exc.response.status_code}, will retry")
+            except requests.RequestException as exc:
+                last_err = exc
+                print(f"  [attempt {attempt+1}] request error: {exc}, will retry")
+        raise last_err
 
     def get_current_mlb_game(self) -> dict:
         xml = self.get_xml("game/mlb")
@@ -79,6 +98,25 @@ class YahooFantasyClient:
         """
         xml = self.get_xml(
             f"league/{league_key}/players;status={status};position={position};start={start};count={count}/stats"
+        )
+        return parse_player_stats(parse_xml(xml.body))
+
+    def get_league_players_stats_date_page(
+        self,
+        league_key: str,
+        *,
+        game_date: str,
+        status: str,
+        position: str,
+        start: int,
+        count: int,
+    ) -> dict[str, dict[int, str | None]]:
+        """Fetch per-date stats for a page of players.
+
+        Returns a mapping of yahoo_player_key -> {stat_id: value}.
+        """
+        xml = self.get_xml(
+            f"league/{league_key}/players;status={status};position={position};start={start};count={count}/stats;type=date;date={game_date}"
         )
         return parse_player_stats(parse_xml(xml.body))
 

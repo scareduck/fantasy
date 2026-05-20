@@ -1,0 +1,12 @@
+[Unit]
+Description=Fantasy Baseball pitcher game log sync (daily SV+H)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlm/src/fantasy
+Environment=PATH=/home/rlm/.local/bin:/usr/local/bin:/usr/bin:/usr/sbin
+ExecStart=fantasy-game-log-sync
+StandardOutput=journal
+StandardError=journal

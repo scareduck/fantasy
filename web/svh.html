@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SV+H Tracker</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  background: #e8eaed;
+  color: #202124;
+  min-height: 100vh;
+}
+
+header {
+  background: #1a73e8;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+header h1 { font-size: 17px; font-weight: 600; }
+header .spacer { flex: 1; }
+header a { color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+header a:hover { text-decoration: underline; }
+
+select#team-select {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  cursor: pointer;
+}
+select#team-select option { background: #1558b0; color: #fff; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #dadce0;
+  flex-wrap: wrap;
+}
+.toolbar label { font-size: 12px; color: #5f6368; }
+.toolbar select, .toolbar input {
+  padding: 4px 8px;
+  border: 1px solid #bdc1c6;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-left: auto;
+  font-size: 12px;
+  color: #5f6368;
+}
+.swatch {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.table-wrap { padding: 16px; overflow-x: auto; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+th {
+  background: #2c5f8a;
+  color: #fff;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+th:hover { background: #245080; }
+th .arrow { margin-left: 4px; opacity: 0.6; font-size: 10px; }
+td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
+tr:last-child td { border-bottom: none; }
+
+tr.green td { background-color: #c3e6cb; }
+tr.amber td { background-color: #ffeeba; }
+tr.red   td { background-color: #f5c6cb; }
+
+.num { text-align: right; }
+a { color: #1a73e8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+#status { color: #5f6368; font-size: 12px; padding: 8px 16px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SV+H Tracker</h1>
+  <select id="team-select"></select>
+  <div class="spacer"></div>
+  <a href="index.html">&#8592; Home</a>
+</header>
+
+<div class="toolbar">
+  <label>Yahoo status:
+    <select id="avail-filter">
+      <option value="">All</option>
+      <option value="FA">FA</option>
+      <option value="W">Waivers</option>
+      <option value="T">Rostered</option>
+    </select>
+  </label>
+  <label>Search: <input id="search" type="text" placeholder="name or MLB team" style="width:150px"></label>
+  <div class="legend">
+    <span><span class="swatch" style="background:#c3e6cb"></span>1–5 days</span>
+    <span><span class="swatch" style="background:#ffeeba"></span>6–10 days</span>
+    <span><span class="swatch" style="background:#f5c6cb"></span>11+ / no data</span>
+  </div>
+</div>
+
+<div id="status">Loading&#8230;</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th data-col="name">Pitcher <span class="arrow"></span></th>
+        <th data-col="team">MLB <span class="arrow"></span></th>
+        <th data-col="avail_status">Status <span class="arrow"></span></th>
+        <th data-col="fantasy_team_name">Fantasy Team <span class="arrow"></span></th>
+        <th data-col="season_svh">SV+H <span class="arrow"></span></th>
+        <th data-col="last_svh_date">Last SV+H <span class="arrow"></span></th>
+        <th data-col="days_since">Days Ago <span class="arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+"use strict";
+
+const OUR_TEAMS = ["469.l.73362.t.8", "469.l.73362.t.10"];
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setCookie(name, value) {
+  const exp = new Date();
+  exp.setFullYear(exp.getFullYear() + 1);
+  document.cookie = name + "=" + encodeURIComponent(value) + "; expires=" + exp.toUTCString() + "; path=/";
+}
+
+let allRows  = [];
+let sortCol  = "days_since";
+let sortAsc  = true;
+let activeTeam = "all";
+
+function rowClass(days) {
+  if (days === null || days === undefined) return "red";
+  if (days <= 5)  return "green";
+  if (days <= 10) return "amber";
+  return "red";
+}
+
+function yahooPlayerUrl(key) {
+  return "https://sports.yahoo.com/mlb/players/" + key.split(".").pop() + "/";
+}
+function yahooTeamUrl(key) {
+  const parts = key.split(".");            // ["469","l","73362","t","8"]
+  return "https://baseball.fantasysports.yahoo.com/b1/" + parts[2] + "/" + parts[4];
+}
+
+function sortRows(rows) {
+  return [...rows].sort(function(a, b) {
+    let av = a[sortCol], bv = b[sortCol];
+    if (sortCol === "days_since") {
+      av = (av === null || av === undefined) ? 999999 : av;
+      bv = (bv === null || bv === undefined) ? 999999 : bv;
+    }
+    if (av === null || av === undefined) av = "";
+    if (bv === null || bv === undefined) bv = "";
+    if (typeof av === "number" && typeof bv === "number")
+      return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv))
+      : String(bv).localeCompare(String(av));
+  });
+}
+
+function render() {
+  const avail  = document.getElementById("avail-filter").value;
+  const search = document.getElementById("search").value.toLowerCase();
+
+  let rows = allRows.filter(function(r) {
+    if (avail  && r.avail_status !== avail) return false;
+    if (search && !r.name.toLowerCase().includes(search) &&
+                  !(r.team || "").toLowerCase().includes(search)) return false;
+    return true;
+  });
+  rows = sortRows(rows);
+
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+  rows.forEach(function(r) {
+    const tr = document.createElement("tr");
+    tr.className = rowClass(r.days_since);
+
+    const playerCell = r.player_key
+      ? '<a href="' + yahooPlayerUrl(r.player_key) + '" target="_blank">' + r.name + '</a>'
+      : r.name;
+
+    const fantasyCell = r.fantasy_team_key
+      ? '<a href="' + yahooTeamUrl(r.fantasy_team_key) + '" target="_blank">' + (r.fantasy_team_name || r.fantasy_team_key) + '</a>'
+      : "";
+
+    tr.innerHTML =
+      "<td>" + playerCell + "</td>" +
+      "<td>" + (r.team || "") + "</td>" +
+      "<td>" + (r.avail_status || "") + "</td>" +
+      "<td>" + fantasyCell + "</td>" +
+      '<td class="num">' + (r.season_svh != null ? r.season_svh : "") + "</td>" +
+      "<td>" + (r.last_svh_date || "no data") + "</td>" +
+      '<td class="num">' + (r.days_since != null ? r.days_since : "?") + "</td>";
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("status").textContent =
+    rows.length + " pitcher" + (rows.length === 1 ? "" : "s");
+}
+
+// Sort on column header click.
+document.querySelectorAll("th[data-col]").forEach(function(th) {
+  th.addEventListener("click", function() {
+    const col = th.dataset.col;
+    if (sortCol === col) {
+      sortAsc = !sortAsc;
+    } else {
+      sortCol = col;
+      sortAsc = (col === "days_since" || col === "name");
+    }
+    document.querySelectorAll("th .arrow").forEach(function(a) { a.textContent = ""; });
+    th.querySelector(".arrow").textContent = sortAsc ? " ▲" : " ▼";
+    render();
+  });
+});
+
+document.getElementById("avail-filter").addEventListener("change", render);
+document.getElementById("search").addEventListener("input", render);
+
+document.getElementById("team-select").addEventListener("change", function() {
+  activeTeam = this.value;
+  if (OUR_TEAMS.indexOf(activeTeam) !== -1) setCookie("fantasy_team", activeTeam);
+  loadData();
+});
+
+function loadData() {
+  document.getElementById("status").textContent = "Loading…";
+  document.getElementById("tbody").innerHTML = "";
+  const url = "api.php?type=svh" + (activeTeam !== "all" ? "&team=" + encodeURIComponent(activeTeam) : "");
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      allRows = data;
+      document.querySelector('th[data-col="' + sortCol + '"] .arrow').textContent = sortAsc ? " ▲" : " ▼";
+      render();
+    })
+    .catch(function(err) {
+      document.getElementById("status").textContent = "Error: " + err;
+    });
+}
+
+// Populate team dropdown, then load.
+fetch("api.php?type=teams")
+  .then(function(r) { return r.json(); })
+  .then(function(teams) {
+    const sel = document.getElementById("team-select");
+
+    // "All Teams" always first.
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = "All Teams";
+    sel.appendChild(allOpt);
+
+    const ours   = teams.filter(function(t) { return OUR_TEAMS.indexOf(t.team_key) !== -1; });
+    const others = teams.filter(function(t) { return OUR_TEAMS.indexOf(t.team_key) === -1; });
+
+    function addGroup(label, list) {
+      const g = document.createElement("optgroup");
+      g.label = label;
+      list.forEach(function(t) {
+        const o = document.createElement("option");
+        o.value = t.team_key;
+        o.textContent = t.team_name;
+        g.appendChild(o);
+      });
+      sel.appendChild(g);
+    }
+    addGroup("Our Teams", ours);
+    addGroup("Other Teams", others);
+
+    // Restore saved team if it's one of ours, else default to All Teams.
+    const saved = getCookie("fantasy_team");
+    if (saved && OUR_TEAMS.indexOf(saved) !== -1) activeTeam = saved;
+    sel.value = activeTeam;
+    loadData();
+  })
+  .catch(function() { loadData(); });
+</script>
+</body>
+</html>

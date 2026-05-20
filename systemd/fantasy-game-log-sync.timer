@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync pitcher game logs daily at 10:00 AM
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+AccuracySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

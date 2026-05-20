@@ -540,6 +540,31 @@ def upsert_pitcher_season_stats(
     )
 
 
+def insert_pitcher_game_log(
+    conn: mariadb.Connection,
+    *,
+    player_id: int,
+    game_date: str,
+    sv_holds: float,
+    captured_at_utc,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO pitcher_game_log (player_id, game_date, sv_holds, captured_at_utc)
+        VALUES (?, ?, ?, ?)
+        """,
+        (player_id, game_date, sv_holds, captured_at_utc),
+    )
+
+
+def game_log_date_exists(conn: mariadb.Connection, game_date: str) -> bool:
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM pitcher_game_log WHERE game_date = ?", (game_date,))
+    row = cur.fetchone()
+    return bool(row and row[0] > 0)
+
+
 def insert_espn_forecaster_snapshot(
     conn: mariadb.Connection,
     *,
