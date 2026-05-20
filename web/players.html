@@ -158,6 +158,8 @@ tbody td a:hover { text-decoration: underline; }
 <div class="tabs">
   <div class="tab active" data-tab="batters">Batters</div>
   <div class="tab"        data-tab="pitchers">Pitchers</div>
+  <div class="tab"        data-tab="sp1">1-Start</div>
+  <div class="tab"        data-tab="sp2">2-Start</div>
 </div>
 
 <div class="panel">
@@ -223,6 +225,36 @@ tbody td a:hover { text-decoration: underline; }
     <button class="btn-reset" id="reset-pitchers">Reset</button>
   </div>
 
+  <!-- 1-start filters -->
+  <div class="filters" id="filt-sp1" style="display:none">
+    <div class="fg"><label>Max %Own</label><input type="number" id="sp1-own" value="" min="0" max="100" step="1"></div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Avail</label>
+      <label class="opt"><input type="radio" name="sp1-avail" value="FA" checked> FA</label>
+      <label class="opt"><input type="radio" name="sp1-avail" value="W"> W</label>
+      <label class="opt"><input type="radio" name="sp1-avail" value=""> Both</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label class="opt"><input type="checkbox" id="sp1-il" checked> Excl IL/NA</label></div>
+    <button class="btn-reset" id="reset-sp1">Reset</button>
+  </div>
+
+  <!-- 2-start filters -->
+  <div class="filters" id="filt-sp2" style="display:none">
+    <div class="fg"><label>Max %Own</label><input type="number" id="sp2-own" value="" min="0" max="100" step="1"></div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Avail</label>
+      <label class="opt"><input type="radio" name="sp2-avail" value="FA" checked> FA</label>
+      <label class="opt"><input type="radio" name="sp2-avail" value="W"> W</label>
+      <label class="opt"><input type="radio" name="sp2-avail" value=""> Both</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label class="opt"><input type="checkbox" id="sp2-il" checked> Excl IL/NA</label></div>
+    <button class="btn-reset" id="reset-sp2">Reset</button>
+  </div>
+
   <div class="table-scroll">
     <table>
       <thead id="thead"></thead>
@@ -250,19 +282,21 @@ function setCookie(name, value) {
   document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + exp.toUTCString() + '; path=/';
 }
 
-const store = { batters: null, pitchers: null };
+const store = { batters: null, pitchers: null, sp1: null, sp2: null };
+const VALID_TABS = ['batters', 'pitchers', 'sp1', 'sp2'];
 const savedTab = getCookie('players_tab');
-let activeTab = (savedTab === 'pitchers') ? 'pitchers' : 'batters';
+let activeTab = (savedTab && VALID_TABS.indexOf(savedTab) !== -1) ? savedTab : 'batters';
 let sortCol   = null;
 let sortDir   = 1;
 
 // Apply saved tab state to DOM before first render.
-if (activeTab === 'pitchers') {
+if (activeTab !== 'batters') {
   document.querySelectorAll('.tab').forEach(function(t) {
-    t.classList.toggle('active', t.dataset.tab === 'pitchers');
+    t.classList.toggle('active', t.dataset.tab === activeTab);
   });
-  document.getElementById('filt-batters').style.display  = 'none';
-  document.getElementById('filt-pitchers').style.display = 'flex';
+  VALID_TABS.forEach(function(t) {
+    document.getElementById('filt-' + t).style.display = (t === activeTab) ? 'flex' : 'none';
+  });
 }
 
 // ── Column definitions ─────────────────────────────────────────────────────
@@ -296,7 +330,34 @@ const COLS = {
     { key:'k',        label:'K',     cls:'num' },
     { key:'era',      label:'ERA',   cls:'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
     { key:'whip',     label:'WHIP',  cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+    { key:'k9',       label:'K/9',   cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
     { key:'sv_holds', label:'SV+H',  cls:'num', fmt: v => v != null ? (+v).toFixed(0) : '' },
+  ],
+  sp1: [
+    { key:'name',       label:'Name',    cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+    { key:'player_key', label:'',        noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'team',       label:'Team' },
+    { key:'status',     label:'Status',  fmtClass: statusClass },
+    { key:'avail',      label:'Avail',   fmtClass: availClass },
+    { key:'pct_own',    label:'%Own',    cls:'num', fmt: fmtOwn },
+    { key:'matchup',    label:'Matchup' },
+    { key:'fpts',       label:'FPTS',    cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+    { key:'era',        label:'ERA',     cls:'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
+    { key:'whip',       label:'WHIP',    cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+    { key:'k9',         label:'K/9',     cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+  ],
+  sp2: [
+    { key:'name',       label:'Name',    cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+    { key:'player_key', label:'',        noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'team',       label:'Team' },
+    { key:'status',     label:'Status',  fmtClass: statusClass },
+    { key:'avail',      label:'Avail',   fmtClass: availClass },
+    { key:'pct_own',    label:'%Own',    cls:'num', fmt: fmtOwn },
+    { key:'starts',     label:'Starts' },
+    { key:'fpts',       label:'Tot FPTS', cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+    { key:'era',        label:'ERA',     cls:'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
+    { key:'whip',       label:'WHIP',    cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+    { key:'k9',         label:'K/9',     cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
   ],
 };
 
@@ -324,6 +385,8 @@ function availClass(v) {
 const DEFAULTS = {
   batters:  { 'b-ab': 20 },
   pitchers: { 'p-ip': 10 },
+  sp1:      {},
+  sp2:      {},
 };
 
 function resetFilters(tab) {
@@ -365,6 +428,11 @@ function getFilters(tab) {
     avail:  radioVal('b-avail'),
     exclIL: ck('b-il'),
   };
+  if (tab === 'sp1' || tab === 'sp2') return {
+    own:    g(tab + '-own'),
+    avail:  radioVal(tab + '-avail'),
+    exclIL: ck(tab + '-il'),
+  };
   return {
     ip:     g('p-ip') ?? 0,
     era:    g('p-era'),
@@ -383,6 +451,8 @@ function passes(row, tab, f) {
   if (f.exclIL && (st === 'NA' || /^IL/.test(st))) return false;
   if (f.avail && row.avail !== f.avail) return false;
   if (f.own != null && row.pct_own != null && +row.pct_own > f.own) return false;
+
+  if (tab === 'sp1' || tab === 'sp2') return true;
 
   if (tab === 'batters') {
     if (row.ab == null || +row.ab < f.ab) return false;
@@ -506,8 +576,9 @@ document.querySelectorAll('.tab').forEach(t => {
     sortCol = null; sortDir = 1;
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
-    document.getElementById('filt-batters').style.display  = activeTab === 'batters'  ? 'flex' : 'none';
-    document.getElementById('filt-pitchers').style.display = activeTab === 'pitchers' ? 'flex' : 'none';
+    VALID_TABS.forEach(function(t) {
+      document.getElementById('filt-' + t).style.display = (t === activeTab) ? 'flex' : 'none';
+    });
     loadTab(activeTab);
   });
 });
@@ -520,6 +591,8 @@ document.querySelectorAll('.filters input').forEach(el => {
 });
 document.getElementById('reset-batters').addEventListener('click',  () => resetFilters('batters'));
 document.getElementById('reset-pitchers').addEventListener('click', () => resetFilters('pitchers'));
+document.getElementById('reset-sp1').addEventListener('click',      () => resetFilters('sp1'));
+document.getElementById('reset-sp2').addEventListener('click',      () => resetFilters('sp2'));
 
 // ── Sync timestamp ─────────────────────────────────────────────────────────
 

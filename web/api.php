@@ -159,6 +159,56 @@ if ($type === 'lineup') {
     exit;
 }
 
+if ($type === 'sp1' || $type === 'sp2') {
+    $having   = $type === 'sp1' ? 'HAVING COUNT(*) = 1' : 'HAVING COUNT(*) >= 2';
+    if ($type === 'sp1') {
+        $subq_cols  = "MIN(matchup_text) AS matchup,
+                       CAST(MIN(projection_text) AS DECIMAL(6,2)) AS fpts";
+        $outer_cols = "agg.matchup, agg.fpts";
+    } else {
+        $subq_cols  = "GROUP_CONCAT(matchup_text ORDER BY matchup_text SEPARATOR ', ') AS starts,
+                       ROUND(SUM(CAST(projection_text AS DECIMAL(6,2))), 1) AS fpts";
+        $outer_cols = "agg.starts, agg.fpts";
+    }
+    $sql = "
+        SELECT
+            p.full_name                              AS name,
+            p.yahoo_player_key                       AS player_key,
+            p.editorial_team_abbr                    AS team,
+            COALESCE(p.yahoo_status, '')              AS status,
+            ca.availability_status                   AS avail,
+            ca.percent_owned                         AS pct_own,
+            $outer_cols,
+            CAST(cps.era  AS DECIMAL(5,2))           AS era,
+            CAST(cps.whip AS DECIMAL(5,3))           AS whip,
+            ROUND(cps.k * 9.0 / NULLIF(cps.ip, 0), 1) AS k9
+        FROM current_availability ca
+        JOIN player p ON p.player_id = ca.player_id
+        JOIN current_pitcher_stats cps ON cps.player_id = ca.player_id
+        JOIN (
+            SELECT player_id, $subq_cols
+            FROM current_espn_forecast
+            WHERE player_id IS NOT NULL
+            GROUP BY player_id
+            $having
+        ) agg ON agg.player_id = ca.player_id
+        ORDER BY fpts DESC
+    ";
+    $result = $conn->query($sql);
+    if (!$result) { http_response_code(500); echo json_encode(['error' => $conn->error]); exit; }
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['fpts'] = $row['fpts'] !== null ? (float)$row['fpts'] : null;
+        $row['era']  = $row['era']  !== null ? (float)$row['era']  : null;
+        $row['whip'] = $row['whip'] !== null ? (float)$row['whip'] : null;
+        $row['k9']   = $row['k9']   !== null ? (float)$row['k9']   : null;
+        $rows[] = $row;
+    }
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 if ($type === 'pitchers') {
     // current_availability = MAX sync_run from player_availability_snapshot (latest P run)
     // current_pitcher_stats = MAX sync_run from pitcher_season_stats
@@ -177,6 +227,7 @@ if ($type === 'pitchers') {
             cps.k,
             CAST(cps.era  AS DECIMAL(5,2))           AS era,
             CAST(cps.whip AS DECIMAL(5,3))           AS whip,
+            ROUND(cps.k * 9.0 / NULLIF(cps.ip, 0), 1) AS k9,
             cps.sv_holds
         FROM current_availability ca
         JOIN player p  ON p.player_id  = ca.player_id
