@@ -89,6 +89,7 @@ def run(args: argparse.Namespace) -> int:
                 position=args.position,
                 start=start,
                 count=args.page_size,
+                include_ownership=True,
             )
             if not page:
                 break

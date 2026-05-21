@@ -86,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
                 position="B",
                 start=start,
                 count=args.page_size,
+                include_ownership=True,
             )
             if not page:
                 break

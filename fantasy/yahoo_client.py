@@ -77,10 +77,11 @@ class YahooFantasyClient:
         position: str,
         start: int,
         count: int,
+        include_ownership: bool = False,
     ) -> list[dict]:
-        xml = self.get_xml(
-            f"league/{league_key}/players;status={status};position={position};start={start};count={count}"
-        )
+        base = f"league/{league_key}/players;status={status};position={position};start={start};count={count}"
+        path = f"{base}/percent_owned" if include_ownership else base
+        xml = self.get_xml(path)
         return parse_players(parse_xml(xml.body))
 
     def get_league_players_stats_page(
