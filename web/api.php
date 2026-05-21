@@ -34,7 +34,10 @@ if ($type === 'svh') {
             CAST(cps.sv_holds AS UNSIGNED)                  AS season_svh,
             MAX(pgl.game_date)                              AS last_svh_date,
             DATEDIFF(CURDATE(), MAX(pgl.game_date))         AS days_since,
+            CAST(cps.era  AS DECIMAL(5,2))                  AS era,
+            CAST(cps.whip AS DECIMAL(5,3))                  AS whip,
             COALESCE(ca.availability_status, 'T')           AS avail_status,
+            COALESCE(p.yahoo_status, '')                    AS yahoo_status,
             cr.team_key                                     AS fantasy_team_key,
             cr.team_name                                    AS fantasy_team_name
         FROM current_pitcher_stats cps
@@ -50,8 +53,8 @@ if ($type === 'svh') {
         $team_clause
         GROUP BY
             p.player_id, p.full_name, p.editorial_team_abbr,
-            p.yahoo_player_key, cps.sv_holds, ca.availability_status,
-            cr.team_key, cr.team_name
+            p.yahoo_player_key, cps.sv_holds, cps.era, cps.whip, ca.availability_status,
+            p.yahoo_status, cr.team_key, cr.team_name
         ORDER BY
             CASE WHEN MAX(pgl.game_date) IS NULL THEN 1 ELSE 0 END,
             DATEDIFF(CURDATE(), MAX(pgl.game_date)),
@@ -63,6 +66,8 @@ if ($type === 'svh') {
     while ($row = $result->fetch_assoc()) {
         $row['season_svh'] = $row['season_svh'] !== null ? (int)$row['season_svh'] : null;
         $row['days_since'] = $row['days_since'] !== null ? (int)$row['days_since'] : null;
+        $row['era']        = $row['era']        !== null ? (float)$row['era']      : null;
+        $row['whip']       = $row['whip']       !== null ? (float)$row['whip']     : null;
         $rows[] = $row;
     }
     $conn->close();
@@ -219,8 +224,8 @@ if ($type === 'lineup') {
 
 if ($type === 'sp1' || $type === 'sp2') {
     $having   = $type === 'sp1'
-        ? 'HAVING COUNT(*) = 1 AND CAST(MIN(projection_text) AS DECIMAL(6,2)) >= 9'
-        : 'HAVING COUNT(*) >= 2 AND ROUND(SUM(CAST(projection_text AS DECIMAL(6,2))), 1) >= 18';
+        ? 'HAVING COUNT(*) = 1'
+        : 'HAVING COUNT(*) >= 2';
     if ($type === 'sp1') {
         $subq_cols  = "MIN(matchup_text) AS matchup,
                        CAST(MIN(projection_text) AS DECIMAL(6,2)) AS fpts";

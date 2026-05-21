@@ -194,6 +194,8 @@ tbody td a:hover { text-decoration: underline; }
     </div>
     <div class="filter-sep">|</div>
     <div class="fg"><label class="opt"><input type="checkbox" id="b-il" checked> Excl IL/NA</label></div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Search</label> <input type="text" id="b-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-batters">Reset</button>
   </div>
 
@@ -222,11 +224,15 @@ tbody td a:hover { text-decoration: underline; }
     </div>
     <div class="filter-sep">|</div>
     <div class="fg"><label class="opt"><input type="checkbox" id="p-il" checked> Excl IL/NA</label></div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Search</label> <input type="text" id="p-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-pitchers">Reset</button>
   </div>
 
   <!-- 1-start filters -->
   <div class="filters" id="filt-sp1" style="display:none">
+    <div class="fg"><label>Min FPTS</label><input type="number" id="sp1-fpts" value="9" min="0" step="0.5"></div>
+    <div class="filter-sep">|</div>
     <div class="fg"><label>Max %Own</label><input type="number" id="sp1-own" value="" min="0" max="100" step="1"></div>
     <div class="filter-sep">|</div>
     <div class="fg">
@@ -237,11 +243,15 @@ tbody td a:hover { text-decoration: underline; }
     </div>
     <div class="filter-sep">|</div>
     <div class="fg"><label class="opt"><input type="checkbox" id="sp1-il" checked> Excl IL/NA</label></div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Search</label> <input type="text" id="sp1-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-sp1">Reset</button>
   </div>
 
   <!-- 2-start filters -->
   <div class="filters" id="filt-sp2" style="display:none">
+    <div class="fg"><label>Min FPTS</label><input type="number" id="sp2-fpts" value="18" min="0" step="0.5"></div>
+    <div class="filter-sep">|</div>
     <div class="fg"><label>Max %Own</label><input type="number" id="sp2-own" value="" min="0" max="100" step="1"></div>
     <div class="filter-sep">|</div>
     <div class="fg">
@@ -252,6 +262,8 @@ tbody td a:hover { text-decoration: underline; }
     </div>
     <div class="filter-sep">|</div>
     <div class="fg"><label class="opt"><input type="checkbox" id="sp2-il" checked> Excl IL/NA</label></div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Search</label> <input type="text" id="sp2-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-sp2">Reset</button>
   </div>
 
@@ -385,8 +397,8 @@ function availClass(v) {
 const DEFAULTS = {
   batters:  { 'b-ab': 20 },
   pitchers: { 'p-ip': 10 },
-  sp1:      {},
-  sp2:      {},
+  sp1:      { 'sp1-fpts': 9 },
+  sp2:      { 'sp2-fpts': 18 },
 };
 
 function resetFilters(tab) {
@@ -417,6 +429,7 @@ function getFilters(tab) {
   const g  = id => { const v = document.getElementById(id).value; return v === '' ? null : +v; };
   const ck = id => document.getElementById(id).checked;
 
+  const gs = id => { const el = document.getElementById(id); return el ? el.value.toLowerCase().trim() : ''; };
   if (tab === 'batters') return {
     ab:     g('b-ab') ?? 0,
     obp:    g('b-obp'),
@@ -427,11 +440,14 @@ function getFilters(tab) {
     pos:    radioVal('b-pos'),
     avail:  radioVal('b-avail'),
     exclIL: ck('b-il'),
+    search: gs('b-search'),
   };
   if (tab === 'sp1' || tab === 'sp2') return {
-    own:    g(tab + '-own'),
-    avail:  radioVal(tab + '-avail'),
-    exclIL: ck(tab + '-il'),
+    fptsMin: g(tab + '-fpts') ?? 0,
+    own:     g(tab + '-own'),
+    avail:   radioVal(tab + '-avail'),
+    exclIL:  ck(tab + '-il'),
+    search:  gs(tab + '-search'),
   };
   return {
     ip:     g('p-ip') ?? 0,
@@ -443,6 +459,7 @@ function getFilters(tab) {
     role:   radioVal('p-role'),
     avail:  radioVal('p-avail'),
     exclIL: ck('p-il'),
+    search: gs('p-search'),
   };
 }
 
@@ -451,8 +468,15 @@ function passes(row, tab, f) {
   if (f.exclIL && (st === 'NA' || /^IL/.test(st))) return false;
   if (f.avail && row.avail !== f.avail) return false;
   if (f.own != null && row.pct_own != null && +row.pct_own > f.own) return false;
+  if (f.search) {
+    const haystack = ((row.name || '') + ' ' + (row.team || '')).toLowerCase();
+    if (!haystack.includes(f.search)) return false;
+  }
 
-  if (tab === 'sp1' || tab === 'sp2') return true;
+  if (tab === 'sp1' || tab === 'sp2') {
+    if (f.fptsMin > 0 && (row.fpts == null || +row.fpts < f.fptsMin)) return false;
+    return true;
+  }
 
   if (tab === 'batters') {
     if (row.ab == null || +row.ab < f.ab) return false;

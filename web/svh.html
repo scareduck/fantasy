@@ -127,6 +127,8 @@ a:hover { text-decoration: underline; }
     </select>
   </label>
   <label>Search: <input id="search" type="text" placeholder="name or MLB team" style="width:150px"></label>
+  <label>ERA &le;: <input id="era-max" type="number" min="0" max="30" step="0.1" style="width:60px"></label>
+  <label>WHIP &le;: <input id="whip-max" type="number" min="0" max="5" step="0.01" style="width:60px"></label>
   <div class="legend">
     <span><span class="swatch" style="background:#c3e6cb"></span>1–5 days</span>
     <span><span class="swatch" style="background:#ffeeba"></span>6–10 days</span>
@@ -147,6 +149,8 @@ a:hover { text-decoration: underline; }
         <th data-col="season_svh">SV+H <span class="arrow"></span></th>
         <th data-col="last_svh_date">Last SV+H <span class="arrow"></span></th>
         <th data-col="days_since">Days Ago <span class="arrow"></span></th>
+        <th data-col="era">ERA <span class="arrow"></span></th>
+        <th data-col="whip">WHIP <span class="arrow"></span></th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -206,13 +210,19 @@ function sortRows(rows) {
 }
 
 function render() {
-  const avail  = document.getElementById("avail-filter").value;
-  const search = document.getElementById("search").value.toLowerCase();
+  const avail   = document.getElementById("avail-filter").value;
+  const search  = document.getElementById("search").value.toLowerCase();
+  const eraMax  = document.getElementById("era-max").value  !== ""
+                    ? parseFloat(document.getElementById("era-max").value)  : null;
+  const whipMax = document.getElementById("whip-max").value !== ""
+                    ? parseFloat(document.getElementById("whip-max").value) : null;
 
   let rows = allRows.filter(function(r) {
     if (avail  && r.avail_status !== avail) return false;
     if (search && !r.name.toLowerCase().includes(search) &&
                   !(r.team || "").toLowerCase().includes(search)) return false;
+    if (eraMax  !== null && (r.era  == null || r.era  > eraMax))  return false;
+    if (whipMax !== null && (r.whip == null || r.whip > whipMax)) return false;
     return true;
   });
   rows = sortRows(rows);
@@ -231,14 +241,19 @@ function render() {
       ? '<a href="' + yahooTeamUrl(r.fantasy_team_key) + '" target="_blank">' + (r.fantasy_team_name || r.fantasy_team_key) + '</a>'
       : "";
 
+    const statusCell = r.avail_status || "";
+    const ilTag = r.yahoo_status ? ' <span style="color:#c0392b;font-weight:700">' + r.yahoo_status + '</span>' : "";
+
     tr.innerHTML =
       "<td>" + playerCell + "</td>" +
       "<td>" + (r.team || "") + "</td>" +
-      "<td>" + (r.avail_status || "") + "</td>" +
+      "<td>" + statusCell + ilTag + "</td>" +
       "<td>" + fantasyCell + "</td>" +
       '<td class="num">' + (r.season_svh != null ? r.season_svh : "") + "</td>" +
       "<td>" + (r.last_svh_date || "no data") + "</td>" +
-      '<td class="num">' + (r.days_since != null ? r.days_since : "?") + "</td>";
+      '<td class="num">' + (r.days_since != null ? r.days_since : "?") + "</td>" +
+      '<td class="num">' + (r.era  != null ? r.era.toFixed(2)  : "") + "</td>" +
+      '<td class="num">' + (r.whip != null ? r.whip.toFixed(3) : "") + "</td>";
     tbody.appendChild(tr);
   });
 
@@ -264,6 +279,8 @@ document.querySelectorAll("th[data-col]").forEach(function(th) {
 
 document.getElementById("avail-filter").addEventListener("change", render);
 document.getElementById("search").addEventListener("input", render);
+document.getElementById("era-max").addEventListener("input", render);
+document.getElementById("whip-max").addEventListener("input", render);
 
 document.getElementById("team-select").addEventListener("change", function() {
   activeTeam = this.value;
