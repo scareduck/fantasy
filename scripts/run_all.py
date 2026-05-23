@@ -57,27 +57,26 @@ def main() -> int:
             print(f"ESPN sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
-        print("\n=== Step 5: Pitcher reports ===")
-        report_argv: list[str] = []
         if run_args.send_report:
-            report_argv.append("--email")
-        if run_args.report_recipients:
-            report_argv += ["--recipients"] + run_args.report_recipients
-        rc = report_main(report_argv)
-        if rc:
-            print(f"Report failed (exit {rc}).", file=sys.stderr)
-            return rc
+            print("\n=== Step 5: Pitcher reports ===")
+            report_argv: list[str] = ["--email"]
+            if run_args.report_recipients:
+                report_argv += ["--recipients"] + run_args.report_recipients
+            rc = report_main(report_argv)
+            if rc:
+                print(f"Report failed (exit {rc}).", file=sys.stderr)
+                return rc
 
-        print("\n=== Step 6: Waiver wire report ===")
-        waiver_argv: list[str] = []
-        if run_args.send_report:
-            waiver_argv.append("--email")
-        if run_args.report_recipients:
-            waiver_argv += ["--recipients"] + run_args.report_recipients
-        rc = waiver_main(waiver_argv)
-        if rc:
-            print(f"Waiver report failed (exit {rc}).", file=sys.stderr)
-            return rc
+            print("\n=== Step 6: Waiver wire report ===")
+            waiver_argv: list[str] = ["--email"]
+            if run_args.report_recipients:
+                waiver_argv += ["--recipients"] + run_args.report_recipients
+            rc = waiver_main(waiver_argv)
+            if rc:
+                print(f"Waiver report failed (exit {rc}).", file=sys.stderr)
+                return rc
+        else:
+            print("\n=== Steps 5-6: Skipping reports (--send-report not set) ===")
 
     except InteractiveAuthRequired as exc:
         msg = (
