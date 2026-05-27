@@ -343,13 +343,39 @@ WHERE rs.captured_at_utc = (SELECT MAX(captured_at_utc) FROM roster_snapshot);
 
 -- Current ESPN forecaster: the most recent forecaster snapshot.
 CREATE OR REPLACE VIEW current_espn_forecast AS
-SELECT *
-FROM espn_forecaster_snapshot
-WHERE captured_at_utc = (SELECT MAX(captured_at_utc) FROM espn_forecaster_snapshot);
+SELECT
+    efs.espn_forecaster_snapshot_id,
+    efs.source_name,
+    efs.captured_at_utc,
+    efs.forecaster_for_date,
+    efs.espn_player_id,
+    efs.pitcher_name,
+    efs.team_abbr,
+    efs.opponent_team_abbr,
+    efs.matchup_text,
+    efs.projection_text,
+    efs.player_id,
+    efs.match_method,
+    efs.raw_row_payload,
+    efs.created_at_utc,
+    efs.updated_at_utc
+FROM espn_forecaster_snapshot efs
+WHERE efs.captured_at_utc = (SELECT MAX(captured_at_utc) FROM espn_forecaster_snapshot);
 
 -- Current pitcher season stats: the most recent all-pitcher stats sync (status=A,T).
 CREATE OR REPLACE VIEW current_pitcher_stats AS
-SELECT pss.*
+SELECT
+    pss.pitcher_season_stats_id,
+    pss.sync_run_id,
+    pss.player_id,
+    pss.captured_at_utc,
+    pss.ip,
+    pss.w,
+    pss.k,
+    pss.era,
+    pss.whip,
+    pss.sv_holds,
+    pss.created_at_utc
 FROM pitcher_season_stats pss
 WHERE pss.sync_run_id = (
     SELECT MAX(sync_run_id)
@@ -358,7 +384,8 @@ WHERE pss.sync_run_id = (
       AND requested_statuses = 'A,T'
 );
 
--- Current player availability: the most recent yahoo_sync availability snapshot.
+-- Current player availability: the most recent pitcher (P) availability snapshot.
+-- Scoped to P runs so a subsequent batter sync does not displace pitcher availability.
 CREATE OR REPLACE VIEW current_availability AS
 SELECT
     pas.snapshot_id,
@@ -373,7 +400,12 @@ SELECT
     pas.raw_player_xml,
     pas.created_at_utc
 FROM player_availability_snapshot pas
-WHERE pas.sync_run_id = (SELECT MAX(sync_run_id) FROM player_availability_snapshot);
+WHERE pas.sync_run_id = (
+    SELECT MAX(pas2.sync_run_id)
+    FROM player_availability_snapshot pas2
+    JOIN sync_run sr ON sr.sync_run_id = pas2.sync_run_id
+    WHERE sr.requested_position = 'P'
+);
 
 -- Current batter season stats: the most recent batter stats sync.
 CREATE OR REPLACE VIEW current_batter_stats AS
