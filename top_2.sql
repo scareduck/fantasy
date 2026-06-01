@@ -28,6 +28,10 @@ JOIN (
         GROUP_CONCAT(matchup_text ORDER BY matchup_text SEPARATOR ', ') AS starts
     FROM current_espn_forecast
     WHERE player_id IS NOT NULL
+      AND STR_TO_DATE(
+            CONCAT(YEAR(CURDATE()), '/',
+                   SUBSTRING_INDEX(SUBSTRING_INDEX(matchup_text, '-', 1), ' ', -1)),
+            '%Y/%m/%d') >= CURDATE()
     GROUP BY player_id, forecaster_for_date
 ) efs
     ON efs.player_id = pas.player_id
