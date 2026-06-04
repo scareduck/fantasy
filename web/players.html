@@ -352,7 +352,7 @@ const COLS = {
     { key:'status',     label:'Status',  fmtClass: statusClass },
     { key:'avail',      label:'Avail',   fmtClass: availClass },
     { key:'pct_own',    label:'%Own',    cls:'num', fmt: fmtOwn },
-    { key:'matchup',    label:'Matchup' },
+    { key:'matchup',    label:'Matchup', sortVal: matchupDateVal },
     { key:'fpts',       label:'FPTS',    cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
     { key:'era',        label:'ERA',     cls:'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
     { key:'whip',       label:'WHIP',    cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
@@ -365,7 +365,7 @@ const COLS = {
     { key:'status',     label:'Status',  fmtClass: statusClass },
     { key:'avail',      label:'Avail',   fmtClass: availClass },
     { key:'pct_own',    label:'%Own',    cls:'num', fmt: fmtOwn },
-    { key:'starts',     label:'Starts' },
+    { key:'starts',     label:'Starts', sortVal: matchupDateVal },
     { key:'fpts',       label:'Tot FPTS', cls:'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
     { key:'era',        label:'ERA',     cls:'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
     { key:'whip',       label:'WHIP',    cls:'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
@@ -510,6 +510,12 @@ function numVal(v) {
   return isNaN(n) ? v : n;
 }
 
+function matchupDateVal(s) {
+  if (!s) return null;
+  const m = s.match(/(\d+)\/(\d+)/);
+  return m ? +m[1] * 100 + +m[2] : null;
+}
+
 function render() {
   const tab  = activeTab;
   const rows = store[tab];
@@ -520,9 +526,11 @@ function render() {
   let   data = rows.filter(r => passes(r, tab, f));
 
   if (sortCol !== null && sortCol < cols.length) {
-    const key = cols[sortCol].key;
+    const col = cols[sortCol];
+    const key = col.key;
+    const valFn = col.sortVal ? col.sortVal : numVal;
     data.sort((a, b) => {
-      const av = numVal(a[key]), bv = numVal(b[key]);
+      const av = valFn(a[key]), bv = valFn(b[key]);
       if (av === null && bv === null) return 0;
       if (av === null) return 1;
       if (bv === null) return -1;
