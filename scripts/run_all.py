@@ -9,6 +9,7 @@ from fantasy.notify import send_alert
 from fantasy.yahoo_auth import InteractiveAuthRequired
 from scripts.batter_sync import main as batter_main
 from scripts.espn_forecaster_sync import main as espn_main
+from scripts.mlb_schedule_sync import main as mlb_schedule_main
 from scripts.pitcher_report import main as report_main
 from scripts.pitcher_stats_sync import run as pitcher_stats_run, parse_args as pitcher_stats_parse_args
 from scripts.waiver_report import main as waiver_main
@@ -57,8 +58,14 @@ def main() -> int:
             print(f"ESPN sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
+        print("\n=== Step 5: MLB schedule sync ===")
+        rc = mlb_schedule_main([])
+        if rc:
+            print(f"MLB schedule sync failed (exit {rc}), aborting.", file=sys.stderr)
+            return rc
+
         if run_args.send_report:
-            print("\n=== Step 5: Pitcher reports ===")
+            print("\n=== Step 6: Pitcher reports ===")
             report_argv: list[str] = ["--email"]
             if run_args.report_recipients:
                 report_argv += ["--recipients"] + run_args.report_recipients
@@ -67,7 +74,7 @@ def main() -> int:
                 print(f"Report failed (exit {rc}).", file=sys.stderr)
                 return rc
 
-            print("\n=== Step 6: Waiver wire report ===")
+            print("\n=== Step 7: Waiver wire report ===")
             waiver_argv: list[str] = ["--email"]
             if run_args.report_recipients:
                 waiver_argv += ["--recipients"] + run_args.report_recipients
@@ -76,7 +83,7 @@ def main() -> int:
                 print(f"Waiver report failed (exit {rc}).", file=sys.stderr)
                 return rc
         else:
-            print("\n=== Steps 5-6: Skipping reports (--send-report not set) ===")
+            print("\n=== Steps 6-7: Skipping reports (--send-report not set) ===")
 
     except InteractiveAuthRequired as exc:
         msg = (

@@ -212,11 +212,21 @@ const COLS = {
     { label: "Slot",        key: "slot",
       fmt: (v, r) => slotBadge(r.slot, "slot-bat") },
     { label: "Opp Pitcher", key: "opp_pitcher",
-      fmt: (v, r) => v ? ylink(v, r.opp_player_key) : `<span class="fpts-none">off day</span>` },
+      fmt: (v, r) => {
+        if (v) return ylink(v, r.opp_player_key);
+        return r.has_game
+          ? `<span class="fpts-none">TBD</span>`
+          : `<span class="fpts-none">off day</span>`;
+      } },
     { label: "MLB",         key: "pitcher_team" },
     { label: "Matchup",     key: "matchup",  fmt: v => v || "" },
     { label: "Opp FPTS",    key: "fpts",     cls: "num",
-      fmt: (v)    => `<span class="${fptsCls(v)}">${v !== null ? v.toFixed(1) : "&#8212;"}</span>` },
+      fmt: (v, r) => {
+        if (v !== null) return `<span class="${fptsCls(v)}">${v.toFixed(1)}</span>`;
+        return r.has_game
+          ? `<span class="fpts-none">N/A</span>`
+          : `<span class="fpts-none">&#8212;</span>`;
+      } },
     { label: "ERA",         key: "era",      cls: "num",
       fmt: (v)    => v !== null ? `<span class="${eraCls(v)}">${v.toFixed(2)}</span>` : "" },
   ],

@@ -148,24 +148,30 @@ if ($type === 'starts') {
 if ($type === 'matchups') {
     $stmt = $conn->prepare("
         SELECT
-            p.full_name                                 AS batter,
-            p.yahoo_player_key                          AS player_key,
-            p.editorial_team_abbr                       AS batter_team,
-            cr.selected_position                        AS slot,
-            opp.pitcher_name                            AS opp_pitcher,
-            opp_p.yahoo_player_key                      AS opp_player_key,
-            opp.team_abbr                               AS pitcher_team,
-            opp.matchup_text                            AS matchup,
-            CAST(opp.projection_text AS DECIMAL(6,2))   AS fpts,
-            CAST(cps.era AS DECIMAL(6,2))               AS era
+            p.full_name                                                     AS batter,
+            p.yahoo_player_key                                              AS player_key,
+            p.editorial_team_abbr                                           AS batter_team,
+            cr.selected_position                                            AS slot,
+            COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
+            COALESCE(opp_p.yahoo_player_key, sched_p.yahoo_player_key)     AS opp_player_key,
+            COALESCE(opp.team_abbr, bmatch.pitcher_team)                   AS pitcher_team,
+            COALESCE(opp.matchup_text, bmatch.matchup_text)                AS matchup,
+            CAST(opp.projection_text AS DECIMAL(6,2))                      AS fpts,
+            CAST(cps.era AS DECIMAL(6,2))                                  AS era,
+            (bmatch.game_date IS NOT NULL)                                 AS has_game
         FROM current_roster cr
         JOIN player p ON p.player_id = cr.player_id
+        LEFT JOIN mlb_batter_matchup bmatch
+            ON  bmatch.batter_team = p.editorial_team_abbr
+            AND bmatch.game_date = CURDATE()
         LEFT JOIN current_espn_forecast opp
             ON  opp.opponent_team_abbr = p.editorial_team_abbr
             AND opp.matchup_text LIKE CONCAT('%', MONTH(CURDATE()), '/', DAY(CURDATE()), '%')
             AND opp.projection_text IS NOT NULL
         LEFT JOIN player opp_p ON opp_p.player_id = opp.player_id
-        LEFT JOIN current_pitcher_stats cps ON cps.player_id = opp.player_id
+        LEFT JOIN player sched_p ON sched_p.player_id = bmatch.opp_pitcher_player_id
+        LEFT JOIN current_pitcher_stats cps
+            ON cps.player_id = COALESCE(opp.player_id, bmatch.opp_pitcher_player_id)
         WHERE p.position_type = 'B'
           AND cr.selected_position != 'IL'
           AND cr.team_key = ?
@@ -177,8 +183,9 @@ if ($type === 'matchups') {
     $result = $stmt->get_result();
     $rows = [];
     while ($row = $result->fetch_assoc()) {
-        $row['fpts'] = $row['fpts'] !== null ? (float)$row['fpts'] : null;
-        $row['era']  = $row['era']  !== null ? (float)$row['era']  : null;
+        $row['fpts']     = $row['fpts']     !== null ? (float)$row['fpts'] : null;
+        $row['era']      = $row['era']      !== null ? (float)$row['era']  : null;
+        $row['has_game'] = (bool)$row['has_game'];
         $rows[] = $row;
     }
     $conn->close();

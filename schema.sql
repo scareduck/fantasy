@@ -407,6 +407,49 @@ WHERE pas.sync_run_id = (
     WHERE sr.requested_position = 'P'
 );
 
+-- MLB game schedule with probable starters (one row per game).
+CREATE TABLE IF NOT EXISTS mlb_schedule (
+    mlb_schedule_id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    game_pk                  INT UNSIGNED    NOT NULL,
+    game_date                DATE            NOT NULL,
+    game_datetime_utc        DATETIME,
+    home_team_abbr           VARCHAR(16)     NOT NULL,
+    away_team_abbr           VARCHAR(16)     NOT NULL,
+    home_pitcher_name        VARCHAR(255),
+    home_pitcher_mlb_id      INT UNSIGNED,
+    home_pitcher_player_id   BIGINT UNSIGNED,
+    away_pitcher_name        VARCHAR(255),
+    away_pitcher_mlb_id      INT UNSIGNED,
+    away_pitcher_player_id   BIGINT UNSIGNED,
+    captured_at_utc          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_game_pk    (game_pk),
+    KEY idx_game_date        (game_date)
+);
+
+-- Batter-centric schedule view: one row per team per game with opposing pitcher.
+CREATE OR REPLACE VIEW mlb_batter_matchup AS
+SELECT
+    game_date,
+    away_team_abbr                                                        AS batter_team,
+    home_team_abbr                                                        AS pitcher_team,
+    0                                                                     AS is_home,
+    home_pitcher_name                                                     AS opp_pitcher_name,
+    home_pitcher_mlb_id                                                   AS opp_pitcher_mlb_id,
+    home_pitcher_player_id                                                AS opp_pitcher_player_id,
+    CONCAT(DATE_FORMAT(game_date, '%a %c/%e'), '-@', home_team_abbr)     AS matchup_text
+FROM mlb_schedule
+UNION ALL
+SELECT
+    game_date,
+    home_team_abbr                                                        AS batter_team,
+    away_team_abbr                                                        AS pitcher_team,
+    1                                                                     AS is_home,
+    away_pitcher_name                                                     AS opp_pitcher_name,
+    away_pitcher_mlb_id                                                   AS opp_pitcher_mlb_id,
+    away_pitcher_player_id                                                AS opp_pitcher_player_id,
+    CONCAT(DATE_FORMAT(game_date, '%a %c/%e'), '-', away_team_abbr)      AS matchup_text
+FROM mlb_schedule;
+
 -- Current batter season stats: the most recent batter stats sync.
 CREATE OR REPLACE VIEW current_batter_stats AS
 SELECT

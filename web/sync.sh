@@ -22,4 +22,8 @@ echo "=== Step 4: ESPN forecaster sync ==="
 fantasy-espn
 
 echo ""
+echo "=== Step 5: MLB schedule sync ==="
+fantasy-mlb-schedule
+
+echo ""
 echo "=== Done ==="

@@ -565,6 +565,53 @@ def game_log_date_exists(conn: mariadb.Connection, game_date: str) -> bool:
     return bool(row and row[0] > 0)
 
 
+def upsert_mlb_game(
+    conn: mariadb.Connection,
+    *,
+    game_pk: int,
+    game_date: str,
+    game_datetime_utc: str | None,
+    home_team_abbr: str,
+    away_team_abbr: str,
+    home_pitcher_name: str | None,
+    home_pitcher_mlb_id: int | None,
+    home_pitcher_player_id: int | None,
+    away_pitcher_name: str | None,
+    away_pitcher_mlb_id: int | None,
+    away_pitcher_player_id: int | None,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO mlb_schedule (
+            game_pk, game_date, game_datetime_utc,
+            home_team_abbr, away_team_abbr,
+            home_pitcher_name, home_pitcher_mlb_id, home_pitcher_player_id,
+            away_pitcher_name, away_pitcher_mlb_id, away_pitcher_player_id,
+            captured_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+        ON DUPLICATE KEY UPDATE
+            game_date              = VALUES(game_date),
+            game_datetime_utc      = VALUES(game_datetime_utc),
+            home_team_abbr         = VALUES(home_team_abbr),
+            away_team_abbr         = VALUES(away_team_abbr),
+            home_pitcher_name      = VALUES(home_pitcher_name),
+            home_pitcher_mlb_id    = VALUES(home_pitcher_mlb_id),
+            home_pitcher_player_id = VALUES(home_pitcher_player_id),
+            away_pitcher_name      = VALUES(away_pitcher_name),
+            away_pitcher_mlb_id    = VALUES(away_pitcher_mlb_id),
+            away_pitcher_player_id = VALUES(away_pitcher_player_id),
+            captured_at_utc        = UTC_TIMESTAMP()
+        """,
+        (
+            game_pk, game_date, game_datetime_utc,
+            home_team_abbr, away_team_abbr,
+            home_pitcher_name, home_pitcher_mlb_id, home_pitcher_player_id,
+            away_pitcher_name, away_pitcher_mlb_id, away_pitcher_player_id,
+        ),
+    )
+
+
 def insert_espn_forecaster_snapshot(
     conn: mariadb.Connection,
     *,

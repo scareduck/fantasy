@@ -25,6 +25,7 @@ fantasy-pitcher-stats    = "scripts.pitcher_stats_sync:main"
 fantasy-waiver-report    = "scripts.waiver_report:main"
 fantasy-game-log-sync    = "scripts.pitcher_game_log_sync:main"
 fantasy-svh-report       = "scripts.sv_holds_report:main"
+fantasy-mlb-schedule     = "scripts.mlb_schedule_sync:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
