@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
+import re
+import unicodedata
+from datetime import date, datetime, timezone
+from urllib.request import urlopen
 from xml.etree import ElementTree as ET
 
 import anthropic
@@ -15,6 +18,8 @@ import mariadb
 from fantasy.config import load_anthropic_api_key, load_settings
 from fantasy.db import connect, upsert_fa_il_analysis
 from fantasy.yahoo_xml import NS, find_text
+
+MLB_TRANSACTIONS_URL = "https://statsapi.mlb.com/api/v1/transactions"
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
@@ -103,6 +108,47 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _normalize_name(name: str) -> str:
+    """Lowercase, strip accents, collapse whitespace for fuzzy name matching."""
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_name = nfkd.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", ascii_name).strip().lower()
+
+
+def _fetch_txn_chunk(start: str, end: str) -> list[dict]:
+    url = f"{MLB_TRANSACTIONS_URL}?startDate={start}&endDate={end}&sportId=1&limit=2000"
+    with urlopen(url, timeout=30) as resp:
+        return json.load(resp).get("transactions", [])
+
+
+def fetch_il_transactions(season: int) -> dict[str, list[str]]:
+    """Return a map of normalized player name -> list of IL placement descriptions
+    for the given season. Fetches month-by-month to avoid the 2000-record API cap.
+    """
+    today    = date.today()
+    result: dict[str, list[str]] = {}
+    month_start = date(season, 3, 1)  # MLB season starts in March
+
+    while month_start <= today:
+        next_month  = date(month_start.year + (month_start.month // 12),
+                           (month_start.month % 12) + 1, 1)
+        chunk_end   = min(next_month - __import__("datetime").timedelta(days=1), today)
+        txns = _fetch_txn_chunk(month_start.isoformat(), chunk_end.isoformat())
+        for txn in txns:
+            if txn.get("typeDesc") != "Status Change":
+                continue
+            desc = txn.get("description", "")
+            if "injured list" not in desc.lower() or "activated" in desc.lower():
+                continue
+            name = txn.get("person", {}).get("fullName", "")
+            if not name:
+                continue
+            result.setdefault(_normalize_name(name), []).append(desc)
+        month_start = next_month
+
+    return result
+
+
 def extract_injury_note(raw_player_xml: str | None) -> str | None:
     if not raw_player_xml:
         return None
@@ -158,7 +204,7 @@ def get_fa_il_pitchers(conn: mariadb.Connection, *, player_name: str | None,
     return cur.fetchall()
 
 
-def build_user_message(pitcher: dict) -> str:
+def build_user_message(pitcher: dict, il_txns: dict[str, list[str]]) -> str:
     name    = pitcher["full_name"]
     team    = pitcher["team"] or "Unknown"
     pos     = pitcher["pos"] or "P"
@@ -171,6 +217,12 @@ def build_user_message(pitcher: dict) -> str:
 
     if pitcher.get("injury_note"):
         lines.append(f"Injury note from Yahoo: {pitcher['injury_note']}")
+
+    txn_descs = il_txns.get(_normalize_name(name), [])
+    if txn_descs:
+        lines.append(f"MLB transaction record(s):")
+        for desc in txn_descs[-3:]:  # most recent up to 3
+            lines.append(f"  - {desc}")
 
     if pitcher["yahoo_status_full"]:
         lines.append(f"Yahoo status detail: {pitcher['yahoo_status_full']}")
@@ -196,8 +248,9 @@ def build_user_message(pitcher: dict) -> str:
 def analyze_pitcher(
     anthropic_client: anthropic.Anthropic,
     pitcher: dict,
+    il_txns: dict[str, list[str]],
 ) -> dict:
-    user_msg = build_user_message(pitcher)
+    user_msg = build_user_message(pitcher, il_txns)
     response = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=1024,
@@ -247,10 +300,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         print(f"Analyzing {len(pitchers)} FA/W IL pitcher(s)...")
+        print("Fetching MLB IL transactions...")
+        il_txns = fetch_il_transactions(datetime.now(timezone.utc).year)
+        print(f"Found {sum(len(v) for v in il_txns.values())} IL placement records for {len(il_txns)} players")
 
         for pitcher in pitchers:
             pitcher["injury_note"] = extract_injury_note(pitcher.get("raw_player_xml"))
-            result = analyze_pitcher(anthropic_client, pitcher)
+            result = analyze_pitcher(anthropic_client, pitcher, il_txns)
 
             print_analysis(pitcher, result)
 

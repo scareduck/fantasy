@@ -102,7 +102,6 @@ tbody tr:last-child td { border-bottom: none; }
 
 .name-cell { min-width: 140px; }
 .pos-cell  { color: #5f6368; }
-.inj-cell  { max-width: 220px; white-space: normal; font-size: 12px; color: #3c4043; }
 
 .st-il { color: #c5221f; font-weight: 600; font-size: 11px; }
 .av-fa { color: #188038; font-size: 11px; font-weight: 600; }
@@ -302,7 +301,14 @@ const COLS = [
   { label: 'Sev',    key: 'injury_severity', cls: 'num', fmtClass: sevClass, fmt: fmtSev },
   { label: 'Return', key: 'return_date', fmt: fmtReturn, sortVal: returnSortVal },
   { label: '★', key: 'is_high_quality', fmt: fmtQuality },
-  { label: 'Injury', key: 'injury_description', cls: 'inj-cell' },
+  { label: 'Injury', key: 'injury_description',
+    fmt: (v) => {
+      if (!v) return '';
+      const tip   = v.replace(/"/g, '&quot;');
+      const label = v.length > 32 ? v.slice(0, 30) + '…' : v;
+      return `<span title="${tip}" style="cursor:help; border-bottom:1px dotted #999">${label}</span>`;
+    }
+  },
 ];
 
 function radioVal(name) {
