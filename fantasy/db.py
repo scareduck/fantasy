@@ -565,6 +565,48 @@ def game_log_date_exists(conn: mariadb.Connection, game_date: str) -> bool:
     return bool(row and row[0] > 0)
 
 
+def upsert_fa_il_analysis(
+    conn: mariadb.Connection,
+    *,
+    player_id: int,
+    injury_description: str | None,
+    injury_severity: int | None,
+    return_date: str | None,
+    return_date_is_estimate: bool,
+    is_high_quality: bool,
+    quality_notes: str | None,
+    return_notes: str | None,
+    news_sources_json: str | None,
+    analyzed_at_utc,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO fa_il_pitcher_analysis (
+            player_id, injury_description, injury_severity,
+            return_date, return_date_is_estimate, is_high_quality,
+            quality_notes, return_notes, news_sources_json, analyzed_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            injury_description      = VALUES(injury_description),
+            injury_severity         = VALUES(injury_severity),
+            return_date             = VALUES(return_date),
+            return_date_is_estimate = VALUES(return_date_is_estimate),
+            is_high_quality         = VALUES(is_high_quality),
+            quality_notes           = VALUES(quality_notes),
+            return_notes            = VALUES(return_notes),
+            news_sources_json       = VALUES(news_sources_json),
+            analyzed_at_utc         = VALUES(analyzed_at_utc)
+        """,
+        (
+            player_id, injury_description, injury_severity,
+            return_date, int(return_date_is_estimate), int(is_high_quality),
+            quality_notes, return_notes, news_sources_json,
+            analyzed_at_utc,
+        ),
+    )
+
+
 def upsert_mlb_game(
     conn: mariadb.Connection,
     *,

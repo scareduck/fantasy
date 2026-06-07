@@ -83,6 +83,10 @@ def load_settings() -> Settings:
     )
 
 
+def load_anthropic_api_key() -> str:
+    return _require("ANTHROPIC_API_KEY", "Claude API key", "scareduck-API-key")
+
+
 def load_db_sync_settings() -> DbSyncSettings:
     return DbSyncSettings(
         db_host=os.getenv("DB_HOST", "").strip() or _pw("fantasy-db", "host", "127.0.0.1"),

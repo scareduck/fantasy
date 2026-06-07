@@ -426,6 +426,24 @@ CREATE TABLE IF NOT EXISTS mlb_schedule (
     KEY idx_game_date        (game_date)
 );
 
+-- FA IL pitcher AI analysis: one row per player, upserted on each analysis run.
+CREATE TABLE IF NOT EXISTS fa_il_pitcher_analysis (
+    fa_il_pitcher_analysis_id BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    player_id               BIGINT UNSIGNED    NOT NULL UNIQUE,
+    injury_description      TEXT,
+    injury_severity         TINYINT,
+    return_date             DATE,
+    return_date_is_estimate TINYINT(1)         NOT NULL DEFAULT 0,
+    is_high_quality         TINYINT(1)         NOT NULL DEFAULT 0,
+    quality_notes           TEXT,
+    return_notes            TEXT,
+    news_sources_json       TEXT,
+    analyzed_at_utc         DATETIME           NOT NULL,
+    created_at_utc          DATETIME           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at_utc          DATETIME           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_fail_player FOREIGN KEY (player_id) REFERENCES player (player_id)
+);
+
 -- Batter-centric schedule view: one row per team per game with opposing pitcher.
 CREATE OR REPLACE VIEW mlb_batter_matchup AS
 SELECT

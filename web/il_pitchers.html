@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FA IL Pitchers</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  background: #e8eaed;
+  color: #202124;
+  min-height: 100vh;
+}
+
+header {
+  background: #1a73e8;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+header h1 { font-size: 17px; font-weight: 600; }
+header .spacer { flex: 1; }
+header span { font-size: 12px; opacity: 0.8; }
+header a { color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+header a:hover { text-decoration: underline; }
+
+.panel {
+  background: #fff;
+  border: 1px solid #dadce0;
+  margin: 10px 0 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #ebebeb;
+  background: #fafafa;
+}
+.fg { display: flex; align-items: center; gap: 5px; }
+.fg > label:first-child {
+  font-size: 11px; color: #5f6368; white-space: nowrap;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.fg input[type=number], .fg input[type=text] {
+  width: 64px; padding: 4px 6px;
+  border: 1px solid #ccc; border-radius: 4px;
+  font-size: 12px; color: #202124;
+}
+.fg input[type=text] { width: 130px; }
+.fg input[type=number]:focus,
+.fg input[type=text]:focus { outline: none; border-color: #1a73e8; }
+.fg input[type=checkbox],
+.fg input[type=radio] { cursor: pointer; }
+.fg .opt { display: flex; align-items: center; gap: 3px; font-size: 12px; color: #3c4043; }
+.filter-sep { color: #dadce0; font-size: 18px; line-height: 1; }
+.btn-reset {
+  padding: 4px 10px; font-size: 11px; font-weight: 500;
+  background: none; border: 1px solid #ccc; border-radius: 4px;
+  cursor: pointer; color: #5f6368;
+  margin-left: auto;
+}
+.btn-reset:hover { background: #f0f0f0; }
+
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #f1f3f4;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 2px solid #dadce0;
+  color: #5f6368;
+}
+thead th:hover { background: #e8eaed; color: #202124; }
+thead th.sort-asc  { color: #1a73e8; }
+thead th.sort-asc::after  { content: ' \2191'; }
+thead th.sort-desc { color: #1a73e8; }
+thead th.sort-desc::after { content: ' \2193'; }
+
+tbody td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f1f1f1;
+  white-space: nowrap;
+  position: relative;
+}
+tbody tr:hover td { background: #f8f9ff; }
+tbody tr:last-child td { border-bottom: none; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.name-cell { min-width: 140px; }
+.pos-cell  { color: #5f6368; }
+.inj-cell  { max-width: 220px; white-space: normal; font-size: 12px; color: #3c4043; }
+
+.st-il { color: #c5221f; font-weight: 600; font-size: 11px; }
+.av-fa { color: #188038; font-size: 11px; font-weight: 600; }
+.av-w  { color: #e37400; font-size: 11px; font-weight: 600; }
+
+.sev-1 { color: #188038; font-weight: 700; }
+.sev-2 { color: #7cb342; font-weight: 700; }
+.sev-3 { color: #e37400; font-weight: 700; }
+.sev-4 { color: #d93025; font-weight: 700; }
+.sev-5 { color: #c5221f; font-weight: 700; }
+
+.ret-est { color: #5f6368; }
+.ret-known { font-weight: 600; }
+
+.quality-star { color: #e37400; cursor: help; font-size: 14px; }
+
+tbody td a { color: #1a73e8; text-decoration: none; }
+tbody td a:hover { text-decoration: underline; }
+.stats-link { font-size: 11px; color: #5f6368; }
+
+/* sources popup */
+.src-wrap { position: relative; display: inline-block; }
+.src-btn {
+  color: #1a73e8; font-size: 11px; cursor: pointer;
+  background: none; border: none; padding: 0; text-decoration: underline dotted;
+}
+.src-popup {
+  display: none;
+  position: absolute;
+  top: 100%; left: 0;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  z-index: 100;
+  min-width: 260px;
+  max-width: 420px;
+}
+.src-popup.open { display: block; }
+.src-popup a {
+  display: block; color: #1a73e8; font-size: 12px;
+  text-decoration: none; padding: 3px 0;
+  white-space: normal; border-bottom: 1px solid #f1f1f1;
+}
+.src-popup a:last-child { border-bottom: none; }
+.src-popup a:hover { text-decoration: underline; }
+
+.footer {
+  padding: 6px 14px;
+  font-size: 11px;
+  color: #80868b;
+  border-top: 1px solid #ebebeb;
+  background: #fafafa;
+  display: flex;
+  justify-content: space-between;
+}
+
+.msg { padding: 40px; text-align: center; color: #5f6368; font-size: 14px; }
+.msg.err { color: #c5221f; }
+
+.no-analysis { color: #bbb; font-style: italic; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>FA IL Pitcher Tracker</h1>
+  <div class="spacer"></div>
+  <span id="as-of"></span>
+  <a href="index.html">&#8592; Home</a>
+</header>
+
+<div class="panel">
+
+  <div class="filters" id="filters">
+    <div class="fg"><label>Search</label>
+      <input type="text" id="f-search" placeholder="name or team" style="width:140px">
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Max Sev</label>
+      <input type="number" id="f-sev" value="" min="1" max="5" step="1" placeholder="1–5" style="width:50px">
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg"><label>Return within</label>
+      <input type="number" id="f-days" value="" min="1" step="7" placeholder="days" style="width:60px">
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label>Avail</label>
+      <label class="opt"><input type="radio" name="f-avail" value="FA" checked> FA</label>
+      <label class="opt"><input type="radio" name="f-avail" value="W"> W</label>
+      <label class="opt"><input type="radio" name="f-avail" value=""> Both</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
+      <label class="opt"><input type="checkbox" id="f-quality"> Quality only &#9733;</label>
+    </div>
+    <button class="btn-reset" id="reset-btn">Reset</button>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"><tr><td class="msg" colspan="99">Loading&#8230;</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span id="count-lbl"></span>
+    <span id="sync-lbl"></span>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+let rows   = null;
+let sortCol = null;
+let sortDir = 1;
+let openPopup = null;
+
+function pid(key) { return key ? key.split('.').pop() : ''; }
+function addLink(name, key) {
+  return `<a href="https://baseball.fantasysports.yahoo.com/b1/73362/addplayer?apid=${pid(key)}" target="_blank" rel="noopener">${name}</a>`;
+}
+function statsLink(key) {
+  return `<a class="stats-link" href="https://sports.yahoo.com/mlb/players/${pid(key)}/" target="_blank" rel="noopener">stats</a>`;
+}
+function fmtOwn(v) { return v != null ? (+v).toFixed(1) + '%' : ''; }
+
+function availClass(v) {
+  if (v === 'FA') return 'av-fa';
+  if (v === 'W')  return 'av-w';
+  return '';
+}
+
+function sevClass(v) {
+  if (v == null) return '';
+  return 'sev-' + Math.min(5, Math.max(1, +v));
+}
+
+function fmtSev(v) {
+  if (v == null) return '<span class="no-analysis">?</span>';
+  return String(v);
+}
+
+function fmtReturn(v, r) {
+  if (!v) return '<span class="no-analysis">unknown</span>';
+  const d = new Date(v + 'T12:00:00');
+  const label = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+  return r.return_date_is_estimate
+    ? `<span class="ret-est" title="Estimated">~${label}</span>`
+    : `<span class="ret-known">${label}</span>`;
+}
+
+function returnSortVal(v) {
+  if (!v) return null;
+  return parseInt(v.replace(/-/g, ''), 10);
+}
+
+function fmtQuality(v, r) {
+  if (!v) return '';
+  const tip = (r.quality_notes || '').replace(/"/g, '&quot;');
+  return `<span class="quality-star" title="${tip}">&#9733;</span>`;
+}
+
+function fmtSources(v, r) {
+  if (!v) return '';
+  let sources;
+  try { sources = JSON.parse(v); } catch (e) { return ''; }
+  if (!sources.length) return '';
+  const uid = 'src-' + r._idx;
+  const count = sources.length;
+  const links = sources.map(s => {
+    const href = s.url ? `href="${s.url}" target="_blank" rel="noopener"` : '';
+    return `<a ${href}>${s.title || 'Source'}</a>`;
+  }).join('');
+  return `<span class="src-wrap">
+    <button class="src-btn" data-uid="${uid}">${count} source${count > 1 ? 's' : ''}</button>
+    <div class="src-popup" id="${uid}">${links}</div>
+  </span>`;
+}
+
+const COLS = [
+  { label: 'Name',    key: 'name',       cls: 'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+  { label: '',        key: 'player_key', noSort: true,      fmt: (v) => statsLink(v) },
+  { label: 'Team',   key: 'team' },
+  { label: 'IL',     key: 'il_status',  fmt: v => `<span class="st-il">${v || ''}</span>` },
+  { label: 'Avail',  key: 'avail',      fmtClass: availClass },
+  { label: '%Own',   key: 'pct_own',    cls: 'num', fmt: fmtOwn },
+  { label: 'IP',     key: 'ip',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+  { label: 'ERA',    key: 'era',        cls: 'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
+  { label: 'WHIP',   key: 'whip',       cls: 'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+  { label: 'K/9',    key: 'k9',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+  { label: 'Sev',    key: 'injury_severity', cls: 'num', fmtClass: sevClass, fmt: fmtSev },
+  { label: 'Return', key: 'return_date', fmt: fmtReturn, sortVal: returnSortVal },
+  { label: '★', key: 'is_high_quality', fmt: fmtQuality },
+  { label: 'Injury', key: 'injury_description', cls: 'inj-cell' },
+];
+
+function radioVal(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : '';
+}
+
+function getFilters() {
+  const g  = id => { const v = document.getElementById(id).value; return v === '' ? null : +v; };
+  const gs = id => { const el = document.getElementById(id); return el ? el.value.toLowerCase().trim() : ''; };
+  const ck = id => document.getElementById(id).checked;
+  return {
+    search:  gs('f-search'),
+    maxSev:  g('f-days') != null ? null : g('f-sev'),  // handled below
+    sev:     g('f-sev'),
+    days:    g('f-days'),
+    avail:   radioVal('f-avail'),
+    quality: ck('f-quality'),
+  };
+}
+
+function passes(row, f) {
+  if (f.avail && row.avail !== f.avail) return false;
+  if (f.quality && !row.is_high_quality) return false;
+  if (f.sev != null && row.injury_severity != null && row.injury_severity > f.sev) return false;
+  if (f.days != null && row.return_date) {
+    const ret = new Date(row.return_date + 'T12:00:00');
+    const now = new Date();
+    const diff = (ret - now) / 86400000;
+    if (diff > f.days) return false;
+  }
+  if (f.search) {
+    const hay = ((row.name || '') + ' ' + (row.team || '')).toLowerCase();
+    if (!hay.includes(f.search)) return false;
+  }
+  return true;
+}
+
+function numVal(v) {
+  if (v === null || v === '') return null;
+  const n = +v;
+  return isNaN(n) ? v : n;
+}
+
+function render() {
+  if (!rows) return;
+  const f    = getFilters();
+  let   data = rows.filter(r => passes(r, f));
+
+  if (sortCol !== null && sortCol < COLS.length) {
+    const col  = COLS[sortCol];
+    const key  = col.key;
+    const valFn = col.sortVal ? col.sortVal : numVal;
+    data.sort((a, b) => {
+      const av = valFn(a[key]), bv = valFn(b[key]);
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+  }
+
+  const thead = document.getElementById('thead');
+  thead.innerHTML = '<tr>' + COLS.map((c, i) => {
+    const sc = sortCol === i ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    const cur = c.noSort ? 'style="cursor:default"' : '';
+    return `<th class="${sc}" data-i="${i}" ${cur}>${c.label}</th>`;
+  }).join('') + '</tr>';
+  thead.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      const i = +th.dataset.i;
+      if (COLS[i].noSort) return;
+      if (sortCol === i) sortDir *= -1;
+      else { sortCol = i; sortDir = 1; }
+      render();
+    });
+  });
+
+  const tbody = document.getElementById('tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="99" class="msg">No pitchers match the current filters.</td></tr>';
+    document.getElementById('count-lbl').textContent = '0 pitchers';
+    return;
+  }
+
+  tbody.innerHTML = data.map((row, idx) => {
+    row._idx = idx;
+    return '<tr>' + COLS.map(c => {
+      const raw  = row[c.key];
+      const val  = c.fmt ? c.fmt(raw, row) : (raw == null ? '' : raw);
+      const tdcls = [c.cls || '', c.fmtClass ? c.fmtClass(raw) : ''].filter(Boolean).join(' ');
+      return `<td class="${tdcls}">${val}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
+
+  document.getElementById('count-lbl').textContent =
+    `${data.length} of ${rows.length} pitchers`;
+
+  // wire up source popups
+  tbody.querySelectorAll('.src-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const popup = document.getElementById(btn.dataset.uid);
+      if (!popup) return;
+      const isOpen = popup.classList.contains('open');
+      if (openPopup && openPopup !== popup) openPopup.classList.remove('open');
+      popup.classList.toggle('open', !isOpen);
+      openPopup = isOpen ? null : popup;
+    });
+  });
+}
+
+document.addEventListener('click', () => {
+  if (openPopup) { openPopup.classList.remove('open'); openPopup = null; }
+});
+
+async function load() {
+  try {
+    const resp = await fetch('api.php?type=il_pitchers');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    if (json.error) throw new Error(json.error);
+    rows = json;
+    render();
+  } catch (e) {
+    document.getElementById('tbody').innerHTML =
+      `<tr><td colspan="99" class="msg err">Error: ${e.message}</td></tr>`;
+  }
+}
+
+document.querySelectorAll('.filters input').forEach(el => {
+  el.addEventListener('input',  render);
+  el.addEventListener('change', render);
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  document.querySelectorAll('#filters input').forEach(el => {
+    if (el.type === 'radio')    { el.checked = el.value === 'FA'; return; }
+    if (el.type === 'checkbox') { el.checked = false; return; }
+    el.value = '';
+  });
+  render();
+});
+
+fetch('api.php?type=meta')
+  .then(r => r.json())
+  .then(m => {
+    if (m.pitcher_sync)
+      document.getElementById('as-of').textContent = `P sync: ${m.pitcher_sync}`;
+  })
+  .catch(() => {});
+
+load();
+</script>
+</body>
+</html>
