@@ -122,33 +122,47 @@ tbody td a { color: #1a73e8; text-decoration: none; }
 tbody td a:hover { text-decoration: underline; }
 .stats-link { font-size: 11px; color: #5f6368; }
 
-/* sources popup */
-.src-wrap { position: relative; display: inline-block; }
-.src-btn {
-  color: #1a73e8; font-size: 11px; cursor: pointer;
-  background: none; border: none; padding: 0; text-decoration: underline dotted;
+/* injury detail popup */
+.inj-btn {
+  color: #1a73e8; font-size: 12px; cursor: pointer;
+  background: none; border: none; padding: 0;
+  text-decoration: underline dotted; white-space: nowrap;
 }
-.src-popup {
+.inj-btn:hover { text-decoration: underline; }
+
+#inj-popup {
   display: none;
-  position: absolute;
-  top: 100%; left: 0;
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
   background: #fff;
-  border: 1px solid #dadce0;
-  border-radius: 6px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-  z-index: 100;
-  min-width: 260px;
-  max-width: 420px;
+  border: 1px solid #bdc1c6;
+  border-radius: 8px;
+  padding: 16px 18px 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+  z-index: 200;
+  width: 380px;
+  max-width: 90vw;
 }
-.src-popup.open { display: block; }
-.src-popup a {
-  display: block; color: #1a73e8; font-size: 12px;
-  text-decoration: none; padding: 3px 0;
-  white-space: normal; border-bottom: 1px solid #f1f1f1;
+#inj-popup.open { display: block; }
+#inj-popup-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
 }
-.src-popup a:last-child { border-bottom: none; }
-.src-popup a:hover { text-decoration: underline; }
+#inj-popup-name { font-weight: 700; font-size: 13px; color: #202124; }
+#inj-popup-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; color: #5f6368; line-height: 1; padding: 0 2px;
+}
+#inj-popup-close:hover { color: #202124; }
+#inj-popup-body { font-size: 13px; color: #3c4043; line-height: 1.5; white-space: normal; }
+#inj-popup-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.25);
+  z-index: 199;
+}
+#inj-popup-overlay.open { display: block; }
 
 .footer {
   padding: 6px 14px;
@@ -174,6 +188,15 @@ tbody td a:hover { text-decoration: underline; }
   <span id="as-of"></span>
   <a href="index.html">&#8592; Home</a>
 </header>
+
+<div id="inj-popup-overlay"></div>
+<div id="inj-popup">
+  <div id="inj-popup-header">
+    <span id="inj-popup-name"></span>
+    <button id="inj-popup-close" aria-label="Close">&#x2715;</button>
+  </div>
+  <div id="inj-popup-body"></div>
+</div>
 
 <div class="panel">
 
@@ -224,6 +247,25 @@ let rows   = null;
 let sortCol = null;
 let sortDir = 1;
 let openPopup = null;
+
+const injPopup   = document.getElementById('inj-popup');
+const injOverlay = document.getElementById('inj-popup-overlay');
+const injName    = document.getElementById('inj-popup-name');
+const injBody    = document.getElementById('inj-popup-body');
+
+function openInjPopup(name, body) {
+  injName.textContent = name;
+  injBody.textContent = body;
+  injPopup.classList.add('open');
+  injOverlay.classList.add('open');
+}
+function closeInjPopup() {
+  injPopup.classList.remove('open');
+  injOverlay.classList.remove('open');
+}
+
+document.getElementById('inj-popup-close').addEventListener('click', closeInjPopup);
+injOverlay.addEventListener('click', closeInjPopup);
 
 function pid(key) { return key ? key.split('.').pop() : ''; }
 function addLink(name, key) {
@@ -302,11 +344,12 @@ const COLS = [
   { label: 'Return', key: 'return_date', fmt: fmtReturn, sortVal: returnSortVal },
   { label: '★', key: 'is_high_quality', fmt: fmtQuality },
   { label: 'Injury', key: 'injury_description',
-    fmt: (v) => {
+    fmt: (v, r) => {
       if (!v) return '';
-      const tip   = v.replace(/"/g, '&quot;');
       const label = v.length > 32 ? v.slice(0, 30) + '…' : v;
-      return `<span title="${tip}" style="cursor:help; border-bottom:1px dotted #999">${label}</span>`;
+      const name  = (r.name || '').replace(/"/g, '&quot;');
+      const body  = v.replace(/"/g, '&quot;');
+      return `<button class="inj-btn" data-name="${name}" data-body="${body}">${label}</button>`;
     }
   },
 ];
@@ -407,23 +450,11 @@ function render() {
   document.getElementById('count-lbl').textContent =
     `${data.length} of ${rows.length} pitchers`;
 
-  // wire up source popups
-  tbody.querySelectorAll('.src-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const popup = document.getElementById(btn.dataset.uid);
-      if (!popup) return;
-      const isOpen = popup.classList.contains('open');
-      if (openPopup && openPopup !== popup) openPopup.classList.remove('open');
-      popup.classList.toggle('open', !isOpen);
-      openPopup = isOpen ? null : popup;
-    });
+  // wire up injury detail popups
+  tbody.querySelectorAll('.inj-btn').forEach(btn => {
+    btn.addEventListener('click', () => openInjPopup(btn.dataset.name, btn.dataset.body));
   });
 }
-
-document.addEventListener('click', () => {
-  if (openPopup) { openPopup.classList.remove('open'); openPopup = null; }
-});
 
 async function load() {
   try {
