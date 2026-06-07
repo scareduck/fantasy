@@ -212,6 +212,13 @@ tbody td a:hover { text-decoration: underline; }
     </div>
     <div class="filter-sep">|</div>
     <div class="fg">
+      <label>Role</label>
+      <label class="opt"><input type="radio" name="f-role" value="" checked> All</label>
+      <label class="opt"><input type="radio" name="f-role" value="SP"> SP</label>
+      <label class="opt"><input type="radio" name="f-role" value="RP"> RP</label>
+    </div>
+    <div class="filter-sep">|</div>
+    <div class="fg">
       <label>Avail</label>
       <label class="opt"><input type="radio" name="f-avail" value="FA" checked> FA</label>
       <label class="opt"><input type="radio" name="f-avail" value="W"> W</label>
@@ -350,6 +357,7 @@ const COLS = [
   { label: 'Name',    key: 'name',       cls: 'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
   { label: '',        key: 'player_key', noSort: true,      fmt: (v) => statsLink(v) },
   { label: 'Team',   key: 'team' },
+  { label: 'Pos',    key: 'pos', cls: 'pos-cell' },
   { label: 'IL',     key: 'il_status',  fmt: v => `<span class="st-il">${v || ''}</span>` },
   { label: 'Avail',  key: 'avail',      fmtClass: availClass },
   { label: '%Own',   key: 'pct_own',    cls: 'num', fmt: fmtOwn },
@@ -382,15 +390,19 @@ function getFilters() {
   const ck = id => document.getElementById(id).checked;
   return {
     search:  gs('f-search'),
-    maxSev:  g('f-days') != null ? null : g('f-sev'),  // handled below
     sev:     g('f-sev'),
     days:    g('f-days'),
+    role:    radioVal('f-role'),
     avail:   radioVal('f-avail'),
     quality: ck('f-quality'),
   };
 }
 
 function passes(row, f) {
+  if (f.role) {
+    const pos = (row.pos || '').split(',').map(p => p.trim());
+    if (!pos.includes(f.role)) return false;
+  }
   if (f.avail && row.avail !== f.avail) return false;
   if (f.quality && !row.is_high_quality) return false;
   if (f.sev != null && row.injury_severity != null && row.injury_severity > f.sev) return false;
@@ -494,7 +506,11 @@ document.querySelectorAll('.filters input').forEach(el => {
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   document.querySelectorAll('#filters input').forEach(el => {
-    if (el.type === 'radio')    { el.checked = el.value === 'FA'; return; }
+    if (el.type === 'radio') {
+      el.checked = (el.name === 'f-avail' && el.value === 'FA') ||
+                   (el.name === 'f-role'  && el.value === '');
+      return;
+    }
     if (el.type === 'checkbox') { el.checked = false; return; }
     el.value = '';
   });
