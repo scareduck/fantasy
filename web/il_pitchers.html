@@ -133,8 +133,6 @@ tbody td a:hover { text-decoration: underline; }
 #inj-popup {
   display: none;
   position: fixed;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
   background: #fff;
   border: 1px solid #bdc1c6;
   border-radius: 8px;
@@ -253,11 +251,30 @@ const injOverlay = document.getElementById('inj-popup-overlay');
 const injName    = document.getElementById('inj-popup-name');
 const injBody    = document.getElementById('inj-popup-body');
 
-function openInjPopup(name, body) {
+function openInjPopup(name, body, anchor) {
   injName.textContent = name;
   injBody.textContent = body;
   injPopup.classList.add('open');
   injOverlay.classList.add('open');
+
+  const rect = anchor.getBoundingClientRect();
+  const pw   = injPopup.offsetWidth;
+  const ph   = injPopup.offsetHeight;
+  const vw   = window.innerWidth;
+  const vh   = window.innerHeight;
+  const GAP  = 6;
+
+  // prefer below, flip above if it would clip the bottom
+  let top = rect.bottom + GAP;
+  if (top + ph > vh - 8) top = rect.top - ph - GAP;
+
+  // prefer left-aligned to anchor, shift left if it clips the right edge
+  let left = rect.left;
+  if (left + pw > vw - 8) left = vw - pw - 8;
+  if (left < 8) left = 8;
+
+  injPopup.style.top  = top  + 'px';
+  injPopup.style.left = left + 'px';
 }
 function closeInjPopup() {
   injPopup.classList.remove('open');
@@ -452,7 +469,7 @@ function render() {
 
   // wire up injury detail popups
   tbody.querySelectorAll('.inj-btn').forEach(btn => {
-    btn.addEventListener('click', () => openInjPopup(btn.dataset.name, btn.dataset.body));
+    btn.addEventListener('click', () => openInjPopup(btn.dataset.name, btn.dataset.body, btn));
   });
 }
 
