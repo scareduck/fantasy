@@ -14,12 +14,16 @@ from xml.etree import ElementTree as ET
 
 import anthropic
 import mariadb
+from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 from fantasy.config import load_anthropic_api_key, load_settings
 from fantasy.db import connect, upsert_fa_il_analysis
 from fantasy.yahoo_xml import NS, find_text
 
-MLB_TRANSACTIONS_URL = "https://statsapi.mlb.com/api/v1/transactions"
+MLB_TRANSACTIONS_URL  = "https://statsapi.mlb.com/api/v1/transactions"
+ESPN_INJURIES_URL     = "https://www.espn.com/mlb/injuries"
+ESPN_USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
@@ -149,6 +153,34 @@ def fetch_il_transactions(season: int) -> dict[str, list[str]]:
     return result
 
 
+def fetch_espn_injury_notes() -> dict[str, str]:
+    """Scrape ESPN's MLB injury page and return a map of normalized player name
+    -> latest update text (e.g. 'Jun 7: Verlander (hip) will not return...')
+    """
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(user_agent=ESPN_USER_AGENT)
+        page.goto(ESPN_INJURIES_URL, wait_until="domcontentloaded", timeout=60_000)
+        try:
+            page.wait_for_selector("table", timeout=15_000)
+        except Exception:
+            pass
+        html = page.content()
+        browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict[str, str] = {}
+    for row in soup.select("tr.Table__TR"):
+        cells = row.find_all("td")
+        if len(cells) < 5:
+            continue
+        name = cells[0].get_text(strip=True)
+        note = cells[4].get_text(strip=True)
+        if name and note:
+            result[_normalize_name(name)] = note
+    return result
+
+
 def extract_injury_note(raw_player_xml: str | None) -> str | None:
     if not raw_player_xml:
         return None
@@ -204,7 +236,8 @@ def get_fa_il_pitchers(conn: mariadb.Connection, *, player_name: str | None,
     return cur.fetchall()
 
 
-def build_user_message(pitcher: dict, il_txns: dict[str, list[str]]) -> str:
+def build_user_message(pitcher: dict, il_txns: dict[str, list[str]],
+                        espn_notes: dict[str, str]) -> str:
     name    = pitcher["full_name"]
     team    = pitcher["team"] or "Unknown"
     pos     = pitcher["pos"] or "P"
@@ -217,6 +250,10 @@ def build_user_message(pitcher: dict, il_txns: dict[str, list[str]]) -> str:
 
     if pitcher.get("injury_note"):
         lines.append(f"Injury note from Yahoo: {pitcher['injury_note']}")
+
+    espn_note = espn_notes.get(_normalize_name(name))
+    if espn_note:
+        lines.append(f"ESPN injury update: {espn_note}")
 
     txn_descs = il_txns.get(_normalize_name(name), [])
     if txn_descs:
@@ -249,8 +286,9 @@ def analyze_pitcher(
     anthropic_client: anthropic.Anthropic,
     pitcher: dict,
     il_txns: dict[str, list[str]],
+    espn_notes: dict[str, str],
 ) -> dict:
-    user_msg = build_user_message(pitcher, il_txns)
+    user_msg = build_user_message(pitcher, il_txns, espn_notes)
     response = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=1024,
@@ -304,9 +342,13 @@ def main(argv: list[str] | None = None) -> int:
         il_txns = fetch_il_transactions(datetime.now(timezone.utc).year)
         print(f"Found {sum(len(v) for v in il_txns.values())} IL placement records for {len(il_txns)} players")
 
+        print("Fetching ESPN injury updates...")
+        espn_notes = fetch_espn_injury_notes()
+        print(f"Found ESPN notes for {len(espn_notes)} players")
+
         for pitcher in pitchers:
             pitcher["injury_note"] = extract_injury_note(pitcher.get("raw_player_xml"))
-            result = analyze_pitcher(anthropic_client, pitcher, il_txns)
+            result = analyze_pitcher(anthropic_client, pitcher, il_txns, espn_notes)
 
             print_analysis(pitcher, result)
 
