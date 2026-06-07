@@ -201,8 +201,12 @@ def analyze_pitcher(
     response = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        tools=[ANALYSIS_TOOL],
+        system=[{
+            "type": "text",
+            "text": SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }],
+        tools=[{**ANALYSIS_TOOL, "cache_control": {"type": "ephemeral"}}],
         tool_choice={"type": "tool", "name": "record_pitcher_analysis"},
         messages=[{"role": "user", "content": user_msg}],
     )
