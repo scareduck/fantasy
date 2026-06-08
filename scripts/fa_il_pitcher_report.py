@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import re
 import unicodedata
 from datetime import date, datetime, timezone
@@ -23,6 +24,8 @@ from fantasy.yahoo_xml import NS, find_text
 
 MLB_TRANSACTIONS_URL  = "https://statsapi.mlb.com/api/v1/transactions"
 ESPN_INJURIES_URL     = "https://www.espn.com/mlb/injuries"
+ROTOWIRE_INJURIES_URL = "https://www.rotowire.com/baseball/injury-report.php"
+ROTOWIRE_COOKIES_PATH = pathlib.Path.home() / ".rotowire_cookies.json"
 ESPN_USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -109,6 +112,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Print analysis without writing to DB.")
     parser.add_argument("--player", metavar="NAME",
                         help="Analyze a single player by name (partial match).")
+    parser.add_argument("--rotowire", action="store_true",
+                        help="Fetch Rotowire injury notes (requires fantasy-rotowire-login).")
     return parser.parse_args(argv)
 
 
@@ -149,6 +154,64 @@ def fetch_il_transactions(season: int) -> dict[str, list[str]]:
                 continue
             result.setdefault(_normalize_name(name), []).append(desc)
         month_start = next_month
+
+    return result
+
+
+def fetch_rotowire_injury_notes() -> dict[str, str]:
+    """Scrape Rotowire's MLB injury page using saved session cookies.
+
+    Returns a map of normalized player name -> injury note text.
+    Falls back to {} if cookies are missing or the session has expired.
+    """
+    if not ROTOWIRE_COOKIES_PATH.exists():
+        print("  No Rotowire cookies found — run fantasy-rotowire-login first.")
+        return {}
+
+    cookies = json.loads(ROTOWIRE_COOKIES_PATH.read_text())
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent=ESPN_USER_AGENT,
+        )
+        context.add_cookies(cookies)
+        page = context.new_page()
+        page.goto(ROTOWIRE_INJURIES_URL, wait_until="domcontentloaded", timeout=60_000)
+
+        # Detect redirect back to login — cookies expired
+        if "login" in page.url or "subscribe" in page.url:
+            browser.close()
+            print("  Rotowire session expired — run fantasy-rotowire-login to refresh.")
+            return {}
+
+        try:
+            page.wait_for_selector("table", timeout=20_000)
+        except Exception:
+            pass
+
+        html = page.content()
+        browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict[str, str] = {}
+
+    # Rotowire injury table: columns vary but name is always first,
+    # news/update text is the last substantive column.
+    for row in soup.select("tr"):
+        cells = row.find_all("td")
+        if len(cells) < 4:
+            continue
+        name = cells[0].get_text(strip=True)
+        # Last cell with substantial text is the injury note
+        note = ""
+        for cell in reversed(cells):
+            text = cell.get_text(strip=True)
+            if len(text) > 20:
+                note = text
+                break
+        if name and note:
+            result[_normalize_name(name)] = note
 
     return result
 
@@ -237,7 +300,8 @@ def get_fa_il_pitchers(conn: mariadb.Connection, *, player_name: str | None,
 
 
 def build_user_message(pitcher: dict, il_txns: dict[str, list[str]],
-                        espn_notes: dict[str, str]) -> str:
+                        espn_notes: dict[str, str],
+                        rw_notes: dict[str, str] | None = None) -> str:
     name    = pitcher["full_name"]
     team    = pitcher["team"] or "Unknown"
     pos     = pitcher["pos"] or "P"
@@ -251,9 +315,11 @@ def build_user_message(pitcher: dict, il_txns: dict[str, list[str]],
     if pitcher.get("injury_note"):
         lines.append(f"Injury note from Yahoo: {pitcher['injury_note']}")
 
-    espn_note = espn_notes.get(_normalize_name(name))
-    if espn_note:
-        lines.append(f"ESPN injury update: {espn_note}")
+    key = _normalize_name(name)
+    injury_update = (rw_notes or {}).get(key) or espn_notes.get(key)
+    if injury_update:
+        source = "Rotowire" if (rw_notes or {}).get(key) else "ESPN"
+        lines.append(f"Injury update ({source}): {injury_update}")
 
     txn_descs = il_txns.get(_normalize_name(name), [])
     if txn_descs:
@@ -287,8 +353,9 @@ def analyze_pitcher(
     pitcher: dict,
     il_txns: dict[str, list[str]],
     espn_notes: dict[str, str],
+    rw_notes: dict[str, str] | None = None,
 ) -> dict:
-    user_msg = build_user_message(pitcher, il_txns, espn_notes)
+    user_msg = build_user_message(pitcher, il_txns, espn_notes, rw_notes)
     response = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=1024,
@@ -342,13 +409,20 @@ def main(argv: list[str] | None = None) -> int:
         il_txns = fetch_il_transactions(datetime.now(timezone.utc).year)
         print(f"Found {sum(len(v) for v in il_txns.values())} IL placement records for {len(il_txns)} players")
 
+        if args.rotowire:
+            print("Fetching Rotowire injury notes...")
+            rw_notes = fetch_rotowire_injury_notes()
+            print(f"Found Rotowire notes for {len(rw_notes)} players")
+        else:
+            rw_notes = {}
+
         print("Fetching ESPN injury updates...")
         espn_notes = fetch_espn_injury_notes()
         print(f"Found ESPN notes for {len(espn_notes)} players")
 
         for pitcher in pitchers:
             pitcher["injury_note"] = extract_injury_note(pitcher.get("raw_player_xml"))
-            result = analyze_pitcher(anthropic_client, pitcher, il_txns, espn_notes)
+            result = analyze_pitcher(anthropic_client, pitcher, il_txns, espn_notes, rw_notes)
 
             print_analysis(pitcher, result)
 
