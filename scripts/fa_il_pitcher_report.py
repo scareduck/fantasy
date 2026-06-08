@@ -19,7 +19,12 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 from fantasy.config import load_anthropic_api_key, load_settings
-from fantasy.db import connect, upsert_fa_il_analysis
+from fantasy.db import (
+    connect,
+    insert_rotowire_injury_snapshot,
+    load_rotowire_injuries,
+    upsert_fa_il_analysis,
+)
 from fantasy.yahoo_xml import NS, find_text
 
 MLB_TRANSACTIONS_URL  = "https://statsapi.mlb.com/api/v1/transactions"
@@ -162,13 +167,36 @@ def fetch_il_transactions(season: int) -> dict[str, list[str]]:
     return result
 
 
-def fetch_rotowire_injury_notes() -> dict[str, str]:
-    """Fetch Rotowire's MLB injury JSON using saved session cookies.
+def _rotowire_rows_to_notes(rows: list[dict]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for p in rows:
+        name   = p.get("player_name") or p.get("player", "")
+        injury = p.get("injury", "") or ""
+        status = p.get("status", "") or ""
+        r_date = p.get("r_date") or p.get("rDate", "") or ""
+        if not name:
+            continue
+        note = injury
+        if status:
+            note += f" — {status}"
+        if r_date:
+            note += f" — exp. {r_date}"
+        result[_normalize_name(name)] = note
+    return result
 
-    Returns a map of normalized player name -> injury summary string
-    (e.g. 'Hip — 60-Day IL — exp. 6/14').
+
+def fetch_rotowire_injury_notes(conn) -> dict[str, str]:
+    """Return Rotowire injury notes, using DB cache when fresh enough.
+
+    Checks the DB for a snapshot < 12 hours old first. If stale or absent,
+    fetches from Rotowire, persists to DB, and returns fresh notes.
     Falls back to {} if cookies are missing or the session has expired.
     """
+    cached_rows, cached_at = load_rotowire_injuries(conn)
+    if cached_rows:
+        print(f"  Using cached Rotowire snapshot from {cached_at}")
+        return _rotowire_rows_to_notes(cached_rows)
+
     if not ROTOWIRE_COOKIES_PATH.exists():
         print("  No Rotowire cookies found — run fantasy-rotowire-login first.")
         return {}
@@ -193,22 +221,31 @@ def fetch_rotowire_injury_notes() -> dict[str, str]:
         print("  Rotowire response was not JSON — session may have expired.")
         return {}
 
-    result: dict[str, str] = {}
+    captured_at = datetime.now(timezone.utc).replace(tzinfo=None)
     for p in players:
-        name  = p.get("player", "")
-        injury = p.get("injury", "")
-        status = p.get("status", "")
-        r_date = p.get("rDate", "")
+        name = p.get("player", "")
         if not name:
             continue
-        note = injury
-        if status:
-            note += f" — {status}"
-        if r_date:
-            note += f" — exp. {r_date}"
-        result[_normalize_name(name)] = note
+        insert_rotowire_injury_snapshot(
+            conn,
+            captured_at_utc=captured_at,
+            rotowire_player_id=int(p["ID"]) if p.get("ID") else None,
+            player_name=name,
+            team=p.get("team") or None,
+            position=p.get("position") or None,
+            injury=p.get("injury") or None,
+            status=p.get("status") or None,
+            r_date=p.get("rDate") or None,
+            rotowire_url=p.get("URL") or None,
+        )
+    conn.commit()
+    print(f"  Stored {len(players)} Rotowire records in DB")
 
-    return result
+    # Normalise keys to match _rotowire_rows_to_notes
+    raw_rows = [{"player_name": p.get("player",""), "injury": p.get("injury",""),
+                 "status": p.get("status",""), "r_date": p.get("rDate","")}
+                for p in players]
+    return _rotowire_rows_to_notes(raw_rows)
 
 
 def fetch_espn_injury_notes() -> dict[str, str]:
@@ -406,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.rotowire:
             print("Fetching Rotowire injury notes...")
-            rw_notes = fetch_rotowire_injury_notes()
+            rw_notes = fetch_rotowire_injury_notes(conn)
             print(f"Found Rotowire notes for {len(rw_notes)} players")
         else:
             rw_notes = {}

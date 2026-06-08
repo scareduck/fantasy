@@ -565,6 +565,70 @@ def game_log_date_exists(conn: mariadb.Connection, game_date: str) -> bool:
     return bool(row and row[0] > 0)
 
 
+def insert_rotowire_injury_snapshot(
+    conn: mariadb.Connection,
+    *,
+    captured_at_utc,
+    rotowire_player_id: int | None,
+    player_name: str,
+    team: str | None,
+    position: str | None,
+    injury: str | None,
+    status: str | None,
+    r_date: str | None,
+    rotowire_url: str | None,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO rotowire_injury_snapshot (
+            captured_at_utc, rotowire_player_id, player_name,
+            team, position, injury, status, r_date, rotowire_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            captured_at_utc, rotowire_player_id, player_name,
+            team, position, injury, status, r_date, rotowire_url,
+        ),
+    )
+
+
+def load_rotowire_injuries(
+    conn: mariadb.Connection,
+    *,
+    max_age_hours: int = 12,
+) -> tuple[list[dict], str | None]:
+    """Return (rows, captured_at) from the most recent snapshot if fresh enough.
+
+    Returns ([], None) if no snapshot exists or the most recent is too old.
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT MAX(captured_at_utc) AS ts FROM rotowire_injury_snapshot")
+    row = cur.fetchone()
+    if not row or not row["ts"]:
+        return [], None
+
+    captured_at = row["ts"]
+    cur.execute(
+        "SELECT TIMESTAMPDIFF(HOUR, ?, UTC_TIMESTAMP()) AS age_hours",
+        (captured_at,),
+    )
+    age = cur.fetchone()["age_hours"]
+    if age > max_age_hours:
+        return [], None
+
+    cur.execute(
+        """
+        SELECT rotowire_player_id, player_name, team, position,
+               injury, status, r_date, rotowire_url, captured_at_utc
+        FROM rotowire_injury_snapshot
+        WHERE captured_at_utc = ?
+        """,
+        (captured_at,),
+    )
+    return cur.fetchall(), str(captured_at)
+
+
 def upsert_fa_il_analysis(
     conn: mariadb.Connection,
     *,

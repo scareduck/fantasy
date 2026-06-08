@@ -426,6 +426,27 @@ CREATE TABLE IF NOT EXISTS mlb_schedule (
     KEY idx_game_date        (game_date)
 );
 
+-- Rotowire injury snapshot: one row per player per fetch.
+CREATE TABLE IF NOT EXISTS rotowire_injury_snapshot (
+    rotowire_injury_snapshot_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    captured_at_utc             DATETIME        NOT NULL,
+    rotowire_player_id          INT UNSIGNED,
+    player_name                 VARCHAR(255)    NOT NULL,
+    team                        VARCHAR(16),
+    position                    VARCHAR(32),
+    injury                      VARCHAR(255),
+    status                      VARCHAR(64),
+    r_date                      VARCHAR(32),
+    rotowire_url                VARCHAR(255),
+    KEY idx_rw_captured         (captured_at_utc),
+    KEY idx_rw_player           (player_name)
+);
+
+-- Current Rotowire injuries: most recent snapshot batch.
+CREATE OR REPLACE VIEW current_rotowire_injuries AS
+SELECT * FROM rotowire_injury_snapshot
+WHERE captured_at_utc = (SELECT MAX(captured_at_utc) FROM rotowire_injury_snapshot);
+
 -- FA IL pitcher AI analysis: one row per player, upserted on each analysis run.
 CREATE TABLE IF NOT EXISTS fa_il_pitcher_analysis (
     fa_il_pitcher_analysis_id BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
