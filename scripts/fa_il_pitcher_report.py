@@ -50,7 +50,11 @@ Return date estimation:
   For vague language ("late June" → June 26, "mid-July" → July 15,
   "early August" → August 5). Always set return_date_is_estimate = true
   when inferring from vague language or when no date is mentioned.
-  Set return_date = null if there is genuinely no information.
+  For Tommy John surgery: always estimate 18 months from the surgery date
+  (use the transaction or news date if available, otherwise today's date).
+  Always set return_date_is_estimate = true for Tommy John estimates.
+  Set return_date = null only if there is genuinely no information and the
+  injury is not Tommy John surgery.
 
 Today's date: """ + datetime.now(timezone.utc).strftime("%Y-%m-%d") + """
 
