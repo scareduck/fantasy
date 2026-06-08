@@ -24,7 +24,7 @@ from fantasy.yahoo_xml import NS, find_text
 
 MLB_TRANSACTIONS_URL  = "https://statsapi.mlb.com/api/v1/transactions"
 ESPN_INJURIES_URL     = "https://www.espn.com/mlb/injuries"
-ROTOWIRE_INJURIES_URL = "https://www.rotowire.com/baseball/injury-report.php"
+ROTOWIRE_INJURIES_URL = "https://www.rotowire.com/baseball/tables/injury-report.php?team=ALL&pos=ALL&league=ALL"
 ROTOWIRE_COOKIES_PATH = pathlib.Path.home() / ".rotowire_cookies.json"
 ESPN_USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
@@ -159,9 +159,10 @@ def fetch_il_transactions(season: int) -> dict[str, list[str]]:
 
 
 def fetch_rotowire_injury_notes() -> dict[str, str]:
-    """Scrape Rotowire's MLB injury page using saved session cookies.
+    """Fetch Rotowire's MLB injury JSON using saved session cookies.
 
-    Returns a map of normalized player name -> injury note text.
+    Returns a map of normalized player name -> injury summary string
+    (e.g. 'Hip — 60-Day IL — exp. 6/14').
     Falls back to {} if cookies are missing or the session has expired.
     """
     if not ROTOWIRE_COOKIES_PATH.exists():
@@ -169,49 +170,39 @@ def fetch_rotowire_injury_notes() -> dict[str, str]:
         return {}
 
     cookies = json.loads(ROTOWIRE_COOKIES_PATH.read_text())
+    cookie_dict = {c["name"]: c["value"] for c in cookies}
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent=ESPN_USER_AGENT,
-        )
-        context.add_cookies(cookies)
-        page = context.new_page()
-        page.goto(ROTOWIRE_INJURIES_URL, wait_until="domcontentloaded", timeout=60_000)
+    import requests as _requests
+    session = _requests.Session()
+    session.headers.update({"User-Agent": ESPN_USER_AGENT,
+                             "Referer": "https://www.rotowire.com/baseball/injury-report.php"})
+    session.cookies.update(cookie_dict)
 
-        # Detect redirect back to login — cookies expired
-        if "login" in page.url or "subscribe" in page.url:
-            browser.close()
-            print("  Rotowire session expired — run fantasy-rotowire-login to refresh.")
-            return {}
+    resp = session.get(ROTOWIRE_INJURIES_URL, timeout=20)
+    if resp.status_code != 200:
+        print(f"  Rotowire returned HTTP {resp.status_code} — session may have expired.")
+        return {}
 
-        try:
-            page.wait_for_selector("table", timeout=20_000)
-        except Exception:
-            pass
+    try:
+        players = resp.json()
+    except Exception:
+        print("  Rotowire response was not JSON — session may have expired.")
+        return {}
 
-        html = page.content()
-        browser.close()
-
-    soup = BeautifulSoup(html, "html.parser")
     result: dict[str, str] = {}
-
-    # Rotowire injury table: columns vary but name is always first,
-    # news/update text is the last substantive column.
-    for row in soup.select("tr"):
-        cells = row.find_all("td")
-        if len(cells) < 4:
+    for p in players:
+        name  = p.get("player", "")
+        injury = p.get("injury", "")
+        status = p.get("status", "")
+        r_date = p.get("rDate", "")
+        if not name:
             continue
-        name = cells[0].get_text(strip=True)
-        # Last cell with substantial text is the injury note
-        note = ""
-        for cell in reversed(cells):
-            text = cell.get_text(strip=True)
-            if len(text) > 20:
-                note = text
-                break
-        if name and note:
-            result[_normalize_name(name)] = note
+        note = injury
+        if status:
+            note += f" — {status}"
+        if r_date:
+            note += f" — exp. {r_date}"
+        result[_normalize_name(name)] = note
 
     return result
 

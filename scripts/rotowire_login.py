@@ -1,52 +1,103 @@
 #!/usr/bin/env python3
-"""One-time Rotowire login helper.
+"""Rotowire cookie helper.
 
-Opens a visible browser window at the Rotowire login page. Log in normally,
-then close the browser or wait — the script detects successful login and saves
-your session cookies to ~/.rotowire_cookies.json for use by the IL pitcher
-analysis scraper.
+Preferred: extracts cookies directly from your Firefox profile (fastest, no
+browser window needed). Falls back to opening a headed Playwright window if
+Firefox cookies are not found.
+
+Saves cookies to ~/.rotowire_cookies.json for use by fantasy-il-pitchers.
 """
 from __future__ import annotations
 
 import json
 import pathlib
+import shutil
+import sqlite3
+import tempfile
 import time
 
-from playwright.sync_api import sync_playwright
-
-COOKIES_PATH  = pathlib.Path.home() / ".rotowire_cookies.json"
-LOGIN_URL     = "https://www.rotowire.com/subscribe/login/"
-POLL_INTERVAL = 1.5   # seconds between URL checks
+COOKIES_PATH   = pathlib.Path.home() / ".rotowire_cookies.json"
+FIREFOX_PROFILE = pathlib.Path.home() / ".mozilla/firefox"
+LOGIN_URL      = "https://www.rotowire.com/subscribe/login/"
 
 
-def main() -> int:
-    print("Opening Rotowire login page — please log in with your browser.")
-    print("The window will close automatically once you're authenticated.")
-    print(f"Cookies will be saved to: {COOKIES_PATH}")
+def find_firefox_cookies() -> pathlib.Path | None:
+    for db in sorted(FIREFOX_PROFILE.rglob("cookies.sqlite")):
+        return db
+    return None
 
+
+def extract_firefox_cookies(db_path: pathlib.Path) -> list[dict]:
+    tmp = pathlib.Path(tempfile.mktemp(suffix=".sqlite"))
+    shutil.copy2(db_path, tmp)
+    try:
+        conn = sqlite3.connect(tmp)
+        rows = conn.execute(
+            "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
+            "FROM moz_cookies WHERE host LIKE '%rotowire%'"
+        ).fetchall()
+        conn.close()
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    cookies = []
+    for name, value, host, path, expiry, secure, httponly, samesite in rows:
+        cookies.append({
+            "name": name, "value": value,
+            "domain": host, "path": path,
+            "expires": int(expiry / 1000) if expiry > 0 else -1,
+            "secure": bool(secure),
+            "httpOnly": bool(httponly),
+            "sameSite": ["None", "Lax", "Strict"][samesite] if samesite in (0, 1, 2) else "Lax",
+        })
+    return cookies
+
+
+def extract_via_browser() -> list[dict]:
+    from playwright.sync_api import sync_playwright
+
+    print("Opening Rotowire login page — please log in, then wait.")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context()
         page    = context.new_page()
         page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30_000)
 
-        # Wait until the URL is no longer the login page
         while True:
             try:
                 url = page.url
             except Exception:
-                break  # browser was closed by user
+                break
             if "login" not in url and "subscribe" not in url:
                 break
-            time.sleep(POLL_INTERVAL)
+            time.sleep(1.5)
 
         try:
             cookies = context.cookies()
         except Exception:
-            print("Browser closed before login completed — no cookies saved.")
-            return 1
-
+            print("Browser closed before login completed.")
+            return []
         browser.close()
+
+    # Convert Playwright cookie format (already correct)
+    return cookies
+
+
+def main() -> int:
+    ff_db = find_firefox_cookies()
+    if ff_db:
+        print(f"Found Firefox cookie store: {ff_db}")
+        cookies = extract_firefox_cookies(ff_db)
+        rw = [c for c in cookies if "rotowire" in c["domain"]]
+        if rw:
+            COOKIES_PATH.write_text(json.dumps(rw, indent=2))
+            print(f"Saved {len(rw)} Rotowire cookies from Firefox to {COOKIES_PATH}")
+            return 0
+        print("No Rotowire cookies found in Firefox — falling back to browser login.")
+
+    cookies = extract_via_browser()
+    if not cookies:
+        return 1
 
     COOKIES_PATH.write_text(json.dumps(cookies, indent=2))
     print(f"Saved {len(cookies)} cookies to {COOKIES_PATH}")
