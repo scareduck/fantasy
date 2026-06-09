@@ -320,17 +320,12 @@ function fmtSev(v) {
 
 function fmtReturn(v, r) {
   if (!v) return '<span class="no-analysis">unknown</span>';
-  const d = new Date(v + 'T12:00:00');
-  const label = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
   return r.return_date_is_estimate
-    ? `<span class="ret-est" title="Estimated">~${label}</span>`
-    : `<span class="ret-known">${label}</span>`;
+    ? `<span class="ret-est" title="Estimated">~${v}</span>`
+    : `<span class="ret-known">${v}</span>`;
 }
 
-function returnSortVal(v) {
-  if (!v) return null;
-  return parseInt(v.replace(/-/g, ''), 10);
-}
+
 
 function fmtQuality(v, r) {
   if (!v) return '';
@@ -368,7 +363,7 @@ const COLS = [
   { label: 'WHIP',   key: 'whip',       cls: 'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
   { label: 'K/9',    key: 'k9',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
   { label: 'Sev',    key: 'injury_severity', cls: 'num', fmtClass: sevClass, fmt: fmtSev },
-  { label: 'Return', key: 'return_date', fmt: fmtReturn, sortVal: returnSortVal },
+  { label: 'Return', key: 'return_date', fmt: fmtReturn },
   { label: '★', key: 'is_high_quality', fmt: fmtQuality },
   { label: 'Injury', key: 'injury_description',
     fmt: (v, r) => {
