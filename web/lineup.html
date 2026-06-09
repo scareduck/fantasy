@@ -107,6 +107,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 tbody td a { color: inherit; text-decoration: none; }
 tbody td a:hover { text-decoration: underline; }
+.bref-link { font-size: 11px; color: #5f6368; }
 
 .footer {
   padding: 6px 14px; font-size: 11px; color: #80868b;
@@ -168,9 +169,10 @@ let activeTeam = "469.l.73362.t.8";
 
 function pid(key) { return key ? key.split(".").pop() : ""; }
 function ylink(name, key) {
-  const id = pid(key);
-  if (!id) return name;
-  return `<a href="https://sports.yahoo.com/mlb/players/${id}/" target="_blank" rel="noopener">${name}</a>`;
+  const id   = pid(key);
+  const base = id ? `<a href="https://sports.yahoo.com/mlb/players/${id}/" target="_blank" rel="noopener">${name}</a>` : name;
+  const bref = name ? ` <a class="bref-link" href="https://www.baseball-reference.com/search/search.fcgi?search=${encodeURIComponent(name)}" target="_blank" rel="noopener">b-ref</a>` : '';
+  return base + bref;
 }
 
 function fptsCls(v) {

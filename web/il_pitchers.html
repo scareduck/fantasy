@@ -295,8 +295,10 @@ function pid(key) { return key ? key.split('.').pop() : ''; }
 function addLink(name, key) {
   return `<a href="https://baseball.fantasysports.yahoo.com/b1/73362/addplayer?apid=${pid(key)}" target="_blank" rel="noopener">${name}</a>`;
 }
-function statsLink(key) {
-  return `<a class="stats-link" href="https://sports.yahoo.com/mlb/players/${pid(key)}/" target="_blank" rel="noopener">stats</a>`;
+function statsLink(key, name) {
+  const yahoo = `<a class="stats-link" href="https://sports.yahoo.com/mlb/players/${pid(key)}/" target="_blank" rel="noopener">stats</a>`;
+  const bref  = name ? ` <a class="stats-link" href="https://www.baseball-reference.com/search/search.fcgi?search=${encodeURIComponent(name)}" target="_blank" rel="noopener">b-ref</a>` : '';
+  return yahoo + bref;
 }
 function fmtOwn(v) { return v != null ? (+v).toFixed(1) + '%' : ''; }
 
@@ -355,7 +357,7 @@ function fmtSources(v, r) {
 
 const COLS = [
   { label: 'Name',    key: 'name',       cls: 'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
-  { label: '',        key: 'player_key', noSort: true,      fmt: (v) => statsLink(v) },
+  { label: '',        key: 'player_key', noSort: true,      fmt: (v, r) => statsLink(v, r.name) },
   { label: 'Team',   key: 'team' },
   { label: 'Pos',    key: 'pos', cls: 'pos-cell' },
   { label: 'IL',     key: 'il_status',  fmt: v => `<span class="st-il">${v || ''}</span>` },

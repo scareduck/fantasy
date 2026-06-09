@@ -316,7 +316,7 @@ if (activeTab !== 'batters') {
 const COLS = {
   batters: [
     { key:'name',       label:'Name',  cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
-    { key:'player_key', label:'',      noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'player_key', label:'',      noSort: true,    fmt: (v, r) => statsLink(v, r.name) },
     { key:'team',       label:'Team' },
     { key:'pos',     label:'Pos',    cls:'pos-cell' },
     { key:'status',  label:'Status', fmtClass: statusClass },
@@ -331,7 +331,7 @@ const COLS = {
   ],
   pitchers: [
     { key:'name',       label:'Name', cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
-    { key:'player_key', label:'',     noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'player_key', label:'',     noSort: true,    fmt: (v, r) => statsLink(v, r.name) },
     { key:'team',       label:'Team' },
     { key:'pos',      label:'Pos',   cls:'pos-cell' },
     { key:'status',   label:'Status',fmtClass: statusClass },
@@ -347,7 +347,7 @@ const COLS = {
   ],
   sp1: [
     { key:'name',       label:'Name',    cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
-    { key:'player_key', label:'',        noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'player_key', label:'',        noSort: true,    fmt: (v, r) => statsLink(v, r.name) },
     { key:'team',       label:'Team' },
     { key:'status',     label:'Status',  fmtClass: statusClass },
     { key:'avail',      label:'Avail',   fmtClass: availClass },
@@ -360,7 +360,7 @@ const COLS = {
   ],
   sp2: [
     { key:'name',       label:'Name',    cls:'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
-    { key:'player_key', label:'',        noSort: true,    fmt: (v)    => statsLink(v) },
+    { key:'player_key', label:'',        noSort: true,    fmt: (v, r) => statsLink(v, r.name) },
     { key:'team',       label:'Team' },
     { key:'status',     label:'Status',  fmtClass: statusClass },
     { key:'avail',      label:'Avail',   fmtClass: availClass },
@@ -375,7 +375,11 @@ const COLS = {
 
 function pid(key) { return key ? key.split('.').pop() : ''; }
 function addLink(name, key)  { return `<a href="https://baseball.fantasysports.yahoo.com/b1/73362/addplayer?apid=${pid(key)}" target="_blank" rel="noopener">${name}</a>`; }
-function statsLink(key) { return `<a class="stats-link" href="https://sports.yahoo.com/mlb/players/${pid(key)}/" target="_blank" rel="noopener">stats</a>`; }
+function statsLink(key, name) {
+  const yahoo = `<a class="stats-link" href="https://sports.yahoo.com/mlb/players/${pid(key)}/" target="_blank" rel="noopener">stats</a>`;
+  const bref  = name ? ` <a class="stats-link" href="https://www.baseball-reference.com/search/search.fcgi?search=${encodeURIComponent(name)}" target="_blank" rel="noopener">b-ref</a>` : '';
+  return yahoo + bref;
+}
 
 function fmtOwn(v) { return v != null ? (+v).toFixed(1) + '%' : ''; }
 
