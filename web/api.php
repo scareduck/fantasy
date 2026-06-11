@@ -95,6 +95,15 @@ if ($type === 'meta') {
     exit;
 }
 
+if ($type === 'matchup_dates') {
+    $result = $conn->query("SELECT DISTINCT game_date FROM mlb_batter_matchup WHERE game_date >= CURDATE() ORDER BY game_date");
+    $rows = [];
+    while ($row = $result->fetch_assoc()) $rows[] = $row['game_date'];
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 // Resolve team_key from ?team= param; validate against DB, default to Rob's team.
 $team_key = '469.l.73362.t.8';
 if (isset($_GET['team'])) {
@@ -146,6 +155,14 @@ if ($type === 'starts') {
 }
 
 if ($type === 'matchups') {
+    $match_date = date('Y-m-d');
+    if (isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date'])) {
+        $d = $_GET['date'];
+        if ($d >= date('Y-m-d') && $d <= date('Y-m-d', strtotime('+30 days')))
+            $match_date = $d;
+    }
+    $match_md = date('n/j', strtotime($match_date));
+
     $stmt = $conn->prepare("
         SELECT
             p.full_name                                                     AS batter,
@@ -163,10 +180,10 @@ if ($type === 'matchups') {
         JOIN player p ON p.player_id = cr.player_id
         LEFT JOIN mlb_batter_matchup bmatch
             ON  bmatch.batter_team = p.editorial_team_abbr
-            AND bmatch.game_date = CURDATE()
+            AND bmatch.game_date = ?
         LEFT JOIN current_espn_forecast opp
             ON  opp.opponent_team_abbr = p.editorial_team_abbr
-            AND opp.matchup_text LIKE CONCAT('%', MONTH(CURDATE()), '/', DAY(CURDATE()), '%')
+            AND opp.matchup_text LIKE CONCAT('%', ?, '%')
             AND opp.projection_text IS NOT NULL
         LEFT JOIN player opp_p ON opp_p.player_id = opp.player_id
         LEFT JOIN player sched_p ON sched_p.player_id = bmatch.opp_pitcher_player_id
@@ -178,7 +195,7 @@ if ($type === 'matchups') {
         ORDER BY FIELD(cr.selected_position, 'C','1B','2B','3B','SS','OF','Util','BN'),
                  fpts DESC
     ");
-    $stmt->bind_param('s', $team_key);
+    $stmt->bind_param('sss', $match_date, $match_md, $team_key);
     $stmt->execute();
     $result = $stmt->get_result();
     $rows = [];

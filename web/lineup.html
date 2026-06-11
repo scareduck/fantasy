@@ -28,7 +28,7 @@ header a:hover { text-decoration: underline; }
 header .spacer { flex: 1; }
 header .period { font-size: 12px; opacity: 0.75; }
 
-select#team-select {
+select#team-select, select#matchup-date {
   padding: 4px 8px;
   border: none;
   border-radius: 4px;
@@ -38,7 +38,7 @@ select#team-select {
   color: #fff;
   cursor: pointer;
 }
-select#team-select option { background: #1558b0; color: #fff; }
+select#team-select option, select#matchup-date option { background: #1558b0; color: #fff; }
 
 .tabs {
   display: flex;
@@ -123,6 +123,7 @@ tbody td a:hover { text-decoration: underline; }
 <header>
   <h1>Lineup Helper</h1>
   <select id="team-select"></select>
+  <select id="matchup-date" style="display:none"></select>
   <div class="spacer"></div>
   <span class="period" id="period"></span>
   <a href="index.html">&#8592; Home</a>
@@ -156,14 +157,25 @@ function getCookie(name) {
   const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
   return m ? decodeURIComponent(m[1]) : null;
 }
-function setCookie(name, value) {
+function setCookie(name, value, days) {
   const exp = new Date();
-  exp.setFullYear(exp.getFullYear() + 1);
+  exp.setDate(exp.getDate() + (days || 365));
   document.cookie = name + "=" + encodeURIComponent(value) + "; expires=" + exp.toUTCString() + "; path=/";
 }
 
 let activeTab  = "starts";
 let activeTeam = "469.l.73362.t.8";
+
+const TODAY = (function() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+})();
+let activeMatchupDate = TODAY;
+
+const savedTab = getCookie("fantasy_tab");
+if (savedTab === "matchups" || savedTab === "starts") activeTab = savedTab;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -192,6 +204,10 @@ function fmtDate(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+}
+function fmtDateOption(iso) {
+  if (iso === TODAY) return "Today";
+  return fmtDate(iso);
 }
 
 // ── Column definitions ───────────────────────────────────────────────────────
@@ -247,7 +263,8 @@ function render(rows) {
   ).join("") + "</tr>";
 
   if (!rows.length) {
-    const msg = activeTab === "matchups" ? "No games today." : "No upcoming starts.";
+    const dateLabel = activeMatchupDate === TODAY ? "today" : "on " + fmtDate(activeMatchupDate);
+    const msg = activeTab === "matchups" ? ("No games " + dateLabel + ".") : "No upcoming starts.";
     tbody.innerHTML = `<tr><td colspan="99" class="msg">${msg}</td></tr>`;
     footer.textContent = "";
     return;
@@ -266,7 +283,8 @@ function render(rows) {
     footer.textContent = rows.length + " starts · " + total.toFixed(1) + " projected FPTS";
   } else {
     const playing = rows.filter(r => r.fpts !== null).length;
-    footer.textContent = playing + " of " + rows.length + " position players have a game today";
+    const dateLabel = activeMatchupDate === TODAY ? "today" : "on " + fmtDate(activeMatchupDate);
+    footer.textContent = playing + " of " + rows.length + " position players have a game " + dateLabel;
   }
 }
 
@@ -275,20 +293,24 @@ function render(rows) {
 async function load() {
   const tab  = activeTab;
   const team = activeTeam;
+  const date = tab === "matchups" ? activeMatchupDate : "";
+  const ckey = tab === "matchups" ? (team + "|" + date) : team;
 
-  if (cache[tab][team]) { render(cache[tab][team]); return; }
+  if (cache[tab][ckey]) { render(cache[tab][ckey]); return; }
 
   document.getElementById("tbody").innerHTML =
     "<tr><td colspan=\"99\" class=\"msg\">Loading&#8230;</td></tr>";
   document.getElementById("footer").textContent = "";
 
   try {
-    const resp = await fetch("api.php?type=" + tab + "&team=" + encodeURIComponent(team));
+    let url = "api.php?type=" + tab + "&team=" + encodeURIComponent(team);
+    if (date) url += "&date=" + encodeURIComponent(date);
+    const resp = await fetch(url);
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
-    cache[tab][team] = data;
-    if (activeTab === tab && activeTeam === team) render(data);
+    cache[tab][ckey] = data;
+    if (activeTab === tab && activeTeam === team && (tab !== "matchups" || activeMatchupDate === date)) render(data);
   } catch (e) {
     document.getElementById("tbody").innerHTML =
       "<tr><td colspan=\"99\" class=\"msg err\">Error: " + e.message + "</td></tr>";
@@ -315,8 +337,22 @@ document.querySelectorAll(".tab").forEach(function(t) {
     activeTab = t.dataset.tab;
     document.querySelectorAll(".tab").forEach(function(x) { x.classList.remove("active"); });
     t.classList.add("active");
+    document.getElementById("matchup-date").style.display = activeTab === "matchups" ? "" : "none";
+    setCookie("fantasy_tab", activeTab, 1);
     load();
   });
+});
+
+// Apply initial tab state if restored from cookie.
+if (activeTab !== "starts") {
+  document.querySelectorAll(".tab").forEach(function(x) { x.classList.remove("active"); });
+  document.querySelector('[data-tab="' + activeTab + '"]').classList.add("active");
+  if (activeTab === "matchups") document.getElementById("matchup-date").style.display = "";
+}
+
+document.getElementById("matchup-date").addEventListener("change", function() {
+  activeMatchupDate = this.value;
+  load();
 });
 
 document.getElementById("team-select").addEventListener("change", function() {
@@ -324,6 +360,21 @@ document.getElementById("team-select").addEventListener("change", function() {
   if (OUR_TEAMS.indexOf(activeTeam) !== -1) setCookie("fantasy_team", activeTeam);
   load();
 });
+
+// Populate matchup date dropdown.
+fetch("api.php?type=matchup_dates")
+  .then(function(r) { return r.json(); })
+  .then(function(dates) {
+    const sel = document.getElementById("matchup-date");
+    dates.forEach(function(d) {
+      const o = document.createElement("option");
+      o.value = d;
+      o.textContent = fmtDateOption(d);
+      if (d === TODAY) o.selected = true;
+      sel.appendChild(o);
+    });
+  })
+  .catch(function() {});
 
 // Populate team dropdown from DB, then load data.
 fetch("api.php?type=teams")
