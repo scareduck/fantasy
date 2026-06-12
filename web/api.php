@@ -169,6 +169,7 @@ if ($type === 'matchups') {
             p.yahoo_player_key                                              AS player_key,
             p.editorial_team_abbr                                           AS batter_team,
             cr.selected_position                                            AS slot,
+            COALESCE(p.yahoo_status, '')                                    AS yahoo_status,
             COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
             COALESCE(opp_p.yahoo_player_key, sched_p.yahoo_player_key)     AS opp_player_key,
             COALESCE(opp.team_abbr, bmatch.pitcher_team)                   AS pitcher_team,
@@ -190,7 +191,6 @@ if ($type === 'matchups') {
         LEFT JOIN current_pitcher_stats cps
             ON cps.player_id = COALESCE(opp.player_id, bmatch.opp_pitcher_player_id)
         WHERE p.position_type = 'B'
-          AND cr.selected_position != 'IL'
           AND cr.team_key = ?
         ORDER BY FIELD(cr.selected_position, 'C','1B','2B','3B','SS','OF','Util','BN'),
                  fpts DESC

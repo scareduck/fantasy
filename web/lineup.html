@@ -97,6 +97,9 @@ tbody tr:last-child td { border-bottom: none; }
 .slot-rp  { background: #e6f4ea; color: #137333; }
 .slot-bn  { background: #f1f3f4; color: #5f6368; }
 .slot-bat { background: #fff3e0; color: #e65100; }
+.status-il  { background: #fce8e6; color: #c5221f; }
+.status-dtd { background: #fef7e0; color: #7d5600; }
+.status-na  { background: #f1f3f4; color: #5f6368; }
 
 .fpts-hi   { color: #137333; font-weight: 700; }
 .fpts-mid  { color: #1a73e8; font-weight: 600; }
@@ -228,7 +231,15 @@ const COLS = {
     { label: "Batter",      key: "batter", fmt: (v, r) => ylink(v, r.player_key) },
     { label: "Team",        key: "batter_team" },
     { label: "Slot",        key: "slot",
-      fmt: (v, r) => slotBadge(r.slot, "slot-bat") },
+      fmt: (v, r) => {
+        let out = slotBadge(r.slot, r.slot === "IL" ? "slot-bn" : "slot-bat");
+        const s = r.yahoo_status || "";
+        if (s) {
+          const cls = s.startsWith("IL") ? "status-il" : s === "DTD" ? "status-dtd" : "status-na";
+          out += " " + slotBadge(s, cls);
+        }
+        return out;
+      } },
     { label: "Opp Pitcher", key: "opp_pitcher",
       fmt: (v, r) => {
         if (v) return ylink(v, r.opp_player_key);
