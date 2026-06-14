@@ -248,11 +248,11 @@ if ($type === 'lineup') {
 
 if ($type === 'sp1' || $type === 'sp2') {
     $having   = $type === 'sp1'
-        ? 'HAVING COUNT(*) = 1'
+        ? 'HAVING COUNT(*) >= 1'
         : 'HAVING COUNT(*) >= 2';
     if ($type === 'sp1') {
-        $subq_cols  = "MIN(matchup_text) AS matchup,
-                       CAST(MIN(projection_text) AS DECIMAL(6,2)) AS fpts";
+        $subq_cols  = "SUBSTRING_INDEX(GROUP_CONCAT(matchup_text ORDER BY CAST(projection_text AS DECIMAL(6,2)) DESC SEPARATOR '\t'), '\t', 1) AS matchup,
+                       CAST(MAX(CAST(projection_text AS DECIMAL(6,2))) AS DECIMAL(6,2)) AS fpts";
         $outer_cols = "agg.matchup, agg.fpts";
     } else {
         $subq_cols  = "GROUP_CONCAT(matchup_text ORDER BY matchup_text SEPARATOR ', ') AS starts,
