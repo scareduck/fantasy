@@ -4,7 +4,14 @@ header('Cache-Control: no-cache');
 
 $type = isset($_GET['type']) ? $_GET['type'] : 'batters';
 
-$conn = new mysqli('127.0.0.1', 'rlm', '', 'fantasy', 3306);
+$_cfg = @parse_ini_file(__DIR__ . '/../config/fantasy.env') ?: [];
+$conn = new mysqli(
+    $_cfg['DB_HOST'] ?? '127.0.0.1',
+    $_cfg['DB_USER'] ?? 'rlm',
+    $_cfg['DB_PASS'] ?? '',
+    $_cfg['DB_NAME'] ?? 'fantasy',
+    3306
+);
 if ($conn->connect_error) {
     http_response_code(500);
     echo json_encode(['error' => $conn->connect_error]);

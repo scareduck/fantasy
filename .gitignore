@@ -11,3 +11,4 @@ scripts/snapshots
 *.egg-info/
 tokens/
 foo.sql
+config/fantasy.env
