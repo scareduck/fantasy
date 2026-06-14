@@ -5,8 +5,8 @@ set -euo pipefail
 
 REMOTE=rlm@escr2.scareduck.com
 
-mysqldump --single-transaction --no-tablespaces fantasy \
-  | ssh "$REMOTE" "mysql fantasy"
+mariadb-dump --single-transaction --no-tablespaces fantasy \
+  | ssh "$REMOTE" "mariadb fantasy"
 
 # Pull latest web files in case UI changed.
-ssh "$REMOTE" "cd /home/rlm/src/fantasy && git pull --ff-only --quiet"
+ssh "$REMOTE" "cd /var/www/fantasy && git pull --ff-only --quiet"
