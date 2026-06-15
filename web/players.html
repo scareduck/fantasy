@@ -86,6 +86,13 @@ header a:hover { text-decoration: underline; }
   margin-left: auto;
 }
 .btn-reset:hover { background: #f0f0f0; }
+.btn-pag {
+  padding: 2px 8px; font-size: 13px;
+  background: none; border: 1px solid #ccc; border-radius: 4px;
+  cursor: pointer; color: #5f6368;
+}
+.btn-pag:hover:not(:disabled) { background: #f0f0f0; }
+.btn-pag:disabled { opacity: 0.35; cursor: default; }
 
 /* table */
 .table-scroll { overflow-x: auto; }
@@ -193,7 +200,7 @@ tbody td a:hover { text-decoration: underline; }
       <label class="opt"><input type="radio" name="b-avail" value=""> Both</label>
     </div>
     <div class="filter-sep">|</div>
-    <div class="fg"><label class="opt"><input type="checkbox" id="b-il" checked> Excl IL/NA</label></div>
+    <div class="fg"><label>IL/NA</label><select id="b-il"><option value="excl" selected>Exclude</option><option value="ignore">Ignore</option><option value="only">Filter</option></select></div>
     <div class="filter-sep">|</div>
     <div class="fg"><label>Search</label> <input type="text" id="b-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-batters">Reset</button>
@@ -223,7 +230,7 @@ tbody td a:hover { text-decoration: underline; }
       <label class="opt"><input type="radio" name="p-avail" value=""> Both</label>
     </div>
     <div class="filter-sep">|</div>
-    <div class="fg"><label class="opt"><input type="checkbox" id="p-il" checked> Excl IL/NA</label></div>
+    <div class="fg"><label>IL/NA</label><select id="p-il"><option value="excl" selected>Exclude</option><option value="ignore">Ignore</option><option value="only">Filter</option></select></div>
     <div class="filter-sep">|</div>
     <div class="fg"><label>Search</label> <input type="text" id="p-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-pitchers">Reset</button>
@@ -242,7 +249,7 @@ tbody td a:hover { text-decoration: underline; }
       <label class="opt"><input type="radio" name="sp1-avail" value=""> Both</label>
     </div>
     <div class="filter-sep">|</div>
-    <div class="fg"><label class="opt"><input type="checkbox" id="sp1-il" checked> Excl IL/NA</label></div>
+    <div class="fg"><label>IL/NA</label><select id="sp1-il"><option value="excl" selected>Exclude</option><option value="ignore">Ignore</option><option value="only">Filter</option></select></div>
     <div class="filter-sep">|</div>
     <div class="fg"><label>Search</label> <input type="text" id="sp1-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-sp1">Reset</button>
@@ -261,7 +268,7 @@ tbody td a:hover { text-decoration: underline; }
       <label class="opt"><input type="radio" name="sp2-avail" value=""> Both</label>
     </div>
     <div class="filter-sep">|</div>
-    <div class="fg"><label class="opt"><input type="checkbox" id="sp2-il" checked> Excl IL/NA</label></div>
+    <div class="fg"><label>IL/NA</label><select id="sp2-il"><option value="excl" selected>Exclude</option><option value="ignore">Ignore</option><option value="only">Filter</option></select></div>
     <div class="filter-sep">|</div>
     <div class="fg"><label>Search</label> <input type="text" id="sp2-search" placeholder="name or team" style="width:130px"></div>
     <button class="btn-reset" id="reset-sp2">Reset</button>
@@ -276,6 +283,10 @@ tbody td a:hover { text-decoration: underline; }
 
   <div class="footer">
     <span id="count-lbl"></span>
+    <span id="pag-controls" style="display:flex;gap:6px;align-items:center">
+      <button id="pag-prev" class="btn-pag">&#8249; Prev</button>
+      <button id="pag-next" class="btn-pag">Next &#8250;</button>
+    </span>
     <span id="sync-lbl"></span>
   </div>
 
@@ -297,9 +308,11 @@ function setCookie(name, value) {
 const store = { batters: null, pitchers: null, sp1: null, sp2: null };
 const VALID_TABS = ['batters', 'pitchers', 'sp1', 'sp2'];
 const savedTab = getCookie('players_tab');
-let activeTab = (savedTab && VALID_TABS.indexOf(savedTab) !== -1) ? savedTab : 'batters';
-let sortCol   = null;
-let sortDir   = 1;
+let activeTab   = (savedTab && VALID_TABS.indexOf(savedTab) !== -1) ? savedTab : 'batters';
+let sortCol     = null;
+let sortDir     = 1;
+let currentPage = 0;
+const PAGE_SIZE = 100;
 
 // Apply saved tab state to DOM before first render.
 if (activeTab !== 'batters') {
@@ -406,11 +419,11 @@ const DEFAULTS = {
 };
 
 function resetFilters(tab) {
+  currentPage = 0;
+  document.querySelectorAll(`#filt-${tab} select`).forEach(el => {
+    el.value = 'excl';
+  });
   document.querySelectorAll(`#filt-${tab} input`).forEach(el => {
-    if (el.type === 'checkbox') {
-      el.checked = true;
-      return;
-    }
     if (el.type === 'radio') {
       // defaults: FA for avail radios, '' (Any/All) for pos and role radios
       el.checked = (el.value === 'FA') ||
@@ -431,9 +444,9 @@ function radioVal(name) {
 
 function getFilters(tab) {
   const g  = id => { const v = document.getElementById(id).value; return v === '' ? null : +v; };
-  const ck = id => document.getElementById(id).checked;
-
   const gs = id => { const el = document.getElementById(id); return el ? el.value.toLowerCase().trim() : ''; };
+  const il = id => document.getElementById(id).value;  // 'excl' | 'ignore' | 'only'
+
   if (tab === 'batters') return {
     ab:     g('b-ab') ?? 0,
     obp:    g('b-obp'),
@@ -443,14 +456,14 @@ function getFilters(tab) {
     own:    g('b-own'),
     pos:    radioVal('b-pos'),
     avail:  radioVal('b-avail'),
-    exclIL: ck('b-il'),
+    ilMode: il('b-il'),
     search: gs('b-search'),
   };
   if (tab === 'sp1' || tab === 'sp2') return {
     fptsMin: g(tab + '-fpts') ?? 0,
     own:     g(tab + '-own'),
     avail:   radioVal(tab + '-avail'),
-    exclIL:  ck(tab + '-il'),
+    ilMode:  il(tab + '-il'),
     search:  gs(tab + '-search'),
   };
   return {
@@ -462,14 +475,16 @@ function getFilters(tab) {
     own:    g('p-own'),
     role:   radioVal('p-role'),
     avail:  radioVal('p-avail'),
-    exclIL: ck('p-il'),
+    ilMode: il('p-il'),
     search: gs('p-search'),
   };
 }
 
 function passes(row, tab, f) {
   const st = row.status || '';
-  if (f.exclIL && (st === 'NA' || /^IL/.test(st))) return false;
+  const isIL = st === 'NA' || /^IL/.test(st);
+  if (f.ilMode === 'excl' && isIL) return false;
+  if (f.ilMode === 'only' && !isIL) return false;
   if (f.avail && row.avail !== f.avail) return false;
   if (f.own != null && row.pct_own != null && +row.pct_own > f.own) return false;
   if (f.search) {
@@ -555,16 +570,25 @@ function render() {
       if (cols[i].noSort) return;
       if (sortCol === i) sortDir *= -1;
       else { sortCol = i; sortDir = 1; }
+      currentPage = 0;
       render();
     });
   });
 
+  // pagination
+  const filtered  = data.length;
+  const pageCount = Math.max(1, Math.ceil(filtered / PAGE_SIZE));
+  if (currentPage >= pageCount) currentPage = Math.max(0, pageCount - 1);
+  const start    = currentPage * PAGE_SIZE;
+  const end      = Math.min(start + PAGE_SIZE, filtered);
+  const pageRows = data.slice(start, end);
+
   // tbody
   const tbody = document.getElementById('tbody');
-  if (data.length === 0) {
+  if (filtered === 0) {
     tbody.innerHTML = '<tr><td colspan="99" class="msg">No players match the current filters.</td></tr>';
   } else {
-    tbody.innerHTML = data.map(row =>
+    tbody.innerHTML = pageRows.map(row =>
       '<tr>' + cols.map(c => {
         const raw = row[c.key];
         const val = c.fmt ? c.fmt(raw, row) : (raw == null ? '' : raw);
@@ -574,9 +598,13 @@ function render() {
     ).join('');
   }
 
-  const total = rows.filter(r => f.avail ? r.avail === f.avail : true).length;
+  const total     = rows.filter(r => f.avail ? r.avail === f.avail : true).length;
+  const rangeStr  = filtered === 0 ? '0' : `${(start + 1).toLocaleString()}–${end.toLocaleString()}`;
+  const totalNote = filtered < total ? ` (${total.toLocaleString()} total)` : '';
   document.getElementById('count-lbl').textContent =
-    `${data.length.toLocaleString()} of ${total.toLocaleString()} players`;
+    `${rangeStr} of ${filtered.toLocaleString()} players${totalNote}`;
+  document.getElementById('pag-prev').disabled = currentPage === 0;
+  document.getElementById('pag-next').disabled = end >= filtered;
 }
 
 // ── Data loading ───────────────────────────────────────────────────────────
@@ -609,7 +637,7 @@ document.querySelectorAll('.tab').forEach(t => {
     if (t.dataset.tab === activeTab) return;
     activeTab = t.dataset.tab;
     setCookie('players_tab', activeTab);
-    sortCol = null; sortDir = 1;
+    sortCol = null; sortDir = 1; currentPage = 0;
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     VALID_TABS.forEach(function(t) {
@@ -621,10 +649,12 @@ document.querySelectorAll('.tab').forEach(t => {
 
 // ── Filter listeners ───────────────────────────────────────────────────────
 
-document.querySelectorAll('.filters input').forEach(el => {
-  el.addEventListener('input',  render);
-  el.addEventListener('change', render);
+document.querySelectorAll('.filters input, .filters select').forEach(el => {
+  el.addEventListener('input',  () => { currentPage = 0; render(); });
+  el.addEventListener('change', () => { currentPage = 0; render(); });
 });
+document.getElementById('pag-prev').addEventListener('click', () => { currentPage--; render(); });
+document.getElementById('pag-next').addEventListener('click', () => { currentPage++; render(); });
 document.getElementById('reset-batters').addEventListener('click',  () => resetFilters('batters'));
 document.getElementById('reset-pitchers').addEventListener('click', () => resetFilters('pitchers'));
 document.getElementById('reset-sp1').addEventListener('click',      () => resetFilters('sp1'));
