@@ -26,7 +26,7 @@ def parse_run_all_args() -> argparse.Namespace:
         metavar="NAME",
         help="Limit report recipients (default: all). E.g. --report-recipients rob helen",
     )
-    parser.add_argument("--analyze-il", action="store_true", help="Run FA IL pitcher AI analysis (has API cost).")
+    parser.add_argument("--no-analyze-il", action="store_true", help="Skip FA IL pitcher AI analysis.")
     return parser.parse_args()
 
 
@@ -66,14 +66,14 @@ def main() -> int:
             print(f"MLB schedule sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
-        if run_args.analyze_il:
+        if not run_args.no_analyze_il:
             print("\n=== Step 6: FA IL pitcher analysis ===")
-            rc = il_pitchers_main([])
+            rc = il_pitchers_main(["--rotowire"])
             if rc:
                 print(f"IL pitcher analysis failed (exit {rc}).", file=sys.stderr)
                 return rc
         else:
-            print("\n=== Step 6: Skipping IL pitcher analysis (--analyze-il not set) ===")
+            print("\n=== Step 6: Skipping IL pitcher analysis (--no-analyze-il set) ===")
 
         if run_args.send_report:
             print("\n=== Step 7: Pitcher reports ===")

@@ -403,7 +403,8 @@ function passes(row, f) {
   if (f.avail && row.avail !== f.avail) return false;
   if (f.quality && !row.is_high_quality) return false;
   if (f.sev != null && row.injury_severity != null && row.injury_severity > f.sev) return false;
-  if (f.days != null && row.return_date) {
+  if (f.days != null) {
+    if (!row.return_date) return false;
     const ret = new Date(row.return_date + 'T12:00:00');
     const now = new Date();
     const diff = (ret - now) / 86400000;
