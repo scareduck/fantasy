@@ -73,7 +73,7 @@ ANALYSIS_TOOL: dict = {
         "properties": {
             "injury_description": {
                 "type": "string",
-                "description": "Brief description of the injury (1-2 sentences max).",
+                "description": "Brief description of the injury and current rehab status if known (1-2 sentences max). Include rehab starts, simulated games, or ramp-up activity when mentioned in the news.",
             },
             "injury_severity": {
                 "type": "integer",
@@ -123,6 +123,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Analyze a single player by name (partial match).")
     parser.add_argument("--rotowire", action="store_true",
                         help="Fetch Rotowire injury notes (requires fantasy-rotowire-login).")
+    parser.add_argument("--cached-notes", action="store_true",
+                        help="Use cached Rotowire notes from DB (any age) and skip ESPN scrape.")
     return parser.parse_args(argv)
 
 
@@ -153,10 +155,11 @@ def fetch_il_transactions(season: int) -> dict[str, list[str]]:
         chunk_end   = min(next_month - __import__("datetime").timedelta(days=1), today)
         txns = _fetch_txn_chunk(month_start.isoformat(), chunk_end.isoformat())
         for txn in txns:
-            if txn.get("typeDesc") != "Status Change":
-                continue
             desc = txn.get("description", "")
-            if "injured list" not in desc.lower() or "activated" in desc.lower():
+            type_desc = txn.get("typeDesc", "")
+            is_il = type_desc == "Status Change" and "injured list" in desc.lower() and "activated" not in desc.lower()
+            is_rehab = type_desc == "Assigned" and "rehab assignment" in desc.lower()
+            if not (is_il or is_rehab):
                 continue
             name = txn.get("person", {}).get("fullName", "")
             if not name:
@@ -441,16 +444,23 @@ def main(argv: list[str] | None = None) -> int:
         il_txns = fetch_il_transactions(datetime.now(timezone.utc).year)
         print(f"Found {sum(len(v) for v in il_txns.values())} IL placement records for {len(il_txns)} players")
 
-        if args.rotowire:
-            print("Fetching Rotowire injury notes...")
-            rw_notes = fetch_rotowire_injury_notes(conn)
-            print(f"Found Rotowire notes for {len(rw_notes)} players")
+        if args.cached_notes:
+            print("Loading cached Rotowire notes from DB (skipping live scrapes)...")
+            cached_rows, cached_at = load_rotowire_injuries(conn, max_age_hours=999999)
+            rw_notes = _rotowire_rows_to_notes(cached_rows) if cached_rows else {}
+            print(f"Found cached Rotowire notes for {len(rw_notes)} players (snapshot: {cached_at})")
+            espn_notes = {}
         else:
-            rw_notes = {}
+            if args.rotowire:
+                print("Fetching Rotowire injury notes...")
+                rw_notes = fetch_rotowire_injury_notes(conn)
+                print(f"Found Rotowire notes for {len(rw_notes)} players")
+            else:
+                rw_notes = {}
 
-        print("Fetching ESPN injury updates...")
-        espn_notes = fetch_espn_injury_notes()
-        print(f"Found ESPN notes for {len(espn_notes)} players")
+            print("Fetching ESPN injury updates...")
+            espn_notes = fetch_espn_injury_notes()
+            print(f"Found ESPN notes for {len(espn_notes)} players")
 
         for pitcher in pitchers:
             pitcher["injury_note"] = extract_injury_note(pitcher.get("raw_player_xml"))
