@@ -18,6 +18,7 @@ if ($conn->connect_error) {
     exit;
 }
 $conn->set_charset('utf8mb4');
+$conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
 
 if ($type === 'svh') {
     // Validate optional team filter against live roster data.

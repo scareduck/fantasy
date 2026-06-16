@@ -327,6 +327,11 @@ CREATE TABLE IF NOT EXISTS pitcher_game_log (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Views must be created with utf8mb4_unicode_ci to match the base table
+-- collation. Without this, PHP's set_charset() locks prepared-statement
+-- parameters to utf8mb4_general_ci, causing LIKE/UNION collation errors.
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- Current roster: the most recent roster snapshot across all teams.
 CREATE OR REPLACE VIEW current_roster AS
 SELECT
