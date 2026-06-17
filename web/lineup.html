@@ -230,6 +230,7 @@ const COLS = {
   matchups: [
     { label: "Batter",      key: "batter", fmt: (v, r) => ylink(v, r.player_key) },
     { label: "Team",        key: "batter_team" },
+    { label: "Pos",         key: "display_position" },
     { label: "Slot",        key: "slot",
       fmt: (v, r) => {
         let out = slotBadge(r.slot, r.slot === "IL" ? "slot-bn" : "slot-bat");

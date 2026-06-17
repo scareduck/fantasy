@@ -176,6 +176,7 @@ if ($type === 'matchups') {
             p.full_name                                                     AS batter,
             p.yahoo_player_key                                              AS player_key,
             p.editorial_team_abbr                                           AS batter_team,
+            p.display_position                                              AS display_position,
             cr.selected_position                                            AS slot,
             COALESCE(p.yahoo_status, '')                                    AS yahoo_status,
             COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
