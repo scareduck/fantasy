@@ -126,6 +126,13 @@ a:hover { text-decoration: underline; }
       <option value="T">Rostered</option>
     </select>
   </label>
+  <label>IL/NA:
+    <select id="il-filter">
+      <option value="excl" selected>Exclude</option>
+      <option value="ignore">Ignore</option>
+      <option value="only">Filter</option>
+    </select>
+  </label>
   <label>Search: <input id="search" type="text" placeholder="name or MLB team" style="width:150px"></label>
   <label>ERA &le;: <input id="era-max" type="number" min="0" max="30" step="0.1" style="width:60px"></label>
   <label>WHIP &le;: <input id="whip-max" type="number" min="0" max="5" step="0.01" style="width:60px"></label>
@@ -217,7 +224,12 @@ function render() {
   const whipMax = document.getElementById("whip-max").value !== ""
                     ? parseFloat(document.getElementById("whip-max").value) : null;
 
+  const ilMode = document.getElementById("il-filter").value;
+
   let rows = allRows.filter(function(r) {
+    const isIL = r.yahoo_status && (r.yahoo_status === "NA" || /^IL/.test(r.yahoo_status));
+    if (ilMode === "excl" && isIL) return false;
+    if (ilMode === "only" && !isIL) return false;
     if (avail  && r.avail_status !== avail) return false;
     if (search && !r.name.toLowerCase().includes(search) &&
                   !(r.team || "").toLowerCase().includes(search)) return false;
@@ -278,6 +290,7 @@ document.querySelectorAll("th[data-col]").forEach(function(th) {
 });
 
 document.getElementById("avail-filter").addEventListener("change", render);
+document.getElementById("il-filter").addEventListener("change", render);
 document.getElementById("search").addEventListener("input", render);
 document.getElementById("era-max").addEventListener("input", render);
 document.getElementById("whip-max").addEventListener("input", render);
