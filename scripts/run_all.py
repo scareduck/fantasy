@@ -11,6 +11,7 @@ from scripts.batter_sync import main as batter_main
 from scripts.espn_forecaster_sync import main as espn_main
 from scripts.fa_il_pitcher_report import main as il_pitchers_main
 from scripts.mlb_schedule_sync import main as mlb_schedule_main
+from scripts.pitcher_game_log_sync import main as game_log_main
 from scripts.pitcher_report import main as report_main
 from scripts.pitcher_stats_sync import run as pitcher_stats_run, parse_args as pitcher_stats_parse_args
 from scripts.waiver_report import main as waiver_main
@@ -19,6 +20,7 @@ from scripts.yahoo_sync import parse_args, run as sync_run
 
 def parse_run_all_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the full Fantasy Baseball sync pipeline.")
+    parser.add_argument("--daily", action="store_true", help="Daily mode: run all data syncs but skip IL analysis and reports.")
     parser.add_argument("--send-report", action="store_true", help="Email pitcher reports to all recipients.")
     parser.add_argument(
         "--report-recipients",
@@ -26,7 +28,6 @@ def parse_run_all_args() -> argparse.Namespace:
         metavar="NAME",
         help="Limit report recipients (default: all). E.g. --report-recipients rob helen",
     )
-    parser.add_argument("--no-analyze-il", action="store_true", help="Skip FA IL pitcher AI analysis.")
     return parser.parse_args()
 
 
@@ -66,35 +67,41 @@ def main() -> int:
             print(f"MLB schedule sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
-        if not run_args.no_analyze_il:
-            print("\n=== Step 6: FA IL pitcher analysis ===")
+        print("\n=== Step 6: Pitcher game log sync ===")
+        rc = game_log_main([])
+        if rc:
+            print(f"Pitcher game log sync failed (exit {rc}), aborting.", file=sys.stderr)
+            return rc
+
+        if run_args.daily:
+            print("\n=== Steps 7-9: Skipping IL analysis and reports (--daily mode) ===")
+        else:
+            print("\n=== Step 7: FA IL pitcher analysis ===")
             rc = il_pitchers_main(["--rotowire"])
             if rc:
                 print(f"IL pitcher analysis failed (exit {rc}).", file=sys.stderr)
                 return rc
-        else:
-            print("\n=== Step 6: Skipping IL pitcher analysis (--no-analyze-il set) ===")
 
-        if run_args.send_report:
-            print("\n=== Step 7: Pitcher reports ===")
-            report_argv: list[str] = ["--email"]
-            if run_args.report_recipients:
-                report_argv += ["--recipients"] + run_args.report_recipients
-            rc = report_main(report_argv)
-            if rc:
-                print(f"Report failed (exit {rc}).", file=sys.stderr)
-                return rc
+            if run_args.send_report:
+                print("\n=== Step 8: Pitcher reports ===")
+                report_argv: list[str] = ["--email"]
+                if run_args.report_recipients:
+                    report_argv += ["--recipients"] + run_args.report_recipients
+                rc = report_main(report_argv)
+                if rc:
+                    print(f"Report failed (exit {rc}).", file=sys.stderr)
+                    return rc
 
-            print("\n=== Step 8: Waiver wire report ===")
-            waiver_argv: list[str] = ["--email"]
-            if run_args.report_recipients:
-                waiver_argv += ["--recipients"] + run_args.report_recipients
-            rc = waiver_main(waiver_argv)
-            if rc:
-                print(f"Waiver report failed (exit {rc}).", file=sys.stderr)
-                return rc
-        else:
-            print("\n=== Steps 7-8: Skipping reports (--send-report not set) ===")
+                print("\n=== Step 9: Waiver wire report ===")
+                waiver_argv: list[str] = ["--email"]
+                if run_args.report_recipients:
+                    waiver_argv += ["--recipients"] + run_args.report_recipients
+                rc = waiver_main(waiver_argv)
+                if rc:
+                    print(f"Waiver report failed (exit {rc}).", file=sys.stderr)
+                    return rc
+            else:
+                print("\n=== Steps 8-9: Skipping reports (--send-report not set) ===")
 
     except InteractiveAuthRequired as exc:
         msg = (
