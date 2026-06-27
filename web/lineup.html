@@ -270,6 +270,13 @@ function render(rows) {
   const tbody  = document.getElementById("tbody");
   const footer = document.getElementById("footer");
 
+  rows = rows.filter(function(r) {
+    if (r.slot === "IL") return false;
+    const s = r.yahoo_status || "";
+    if (s === "NA" || /^IL/.test(s)) return false;
+    return true;
+  });
+
   thead.innerHTML = "<tr>" + cols.map(c =>
     `<th class="${c.cls || ""}">${c.label}</th>`
   ).join("") + "</tr>";
