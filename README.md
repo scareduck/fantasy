@@ -42,6 +42,25 @@ Local Python + MariaDB starter project for pulling Yahoo Fantasy Baseball waiver
 
 ## Setup
 
+### 0) MariaDB server collation
+
+Before creating the database, set the server-level collation in
+`/etc/my.cnf.d/mariadb-server.cnf` (under `[mariadb]`):
+
+```ini
+character_set_server = utf8mb4
+collation_server     = utf8mb4_unicode_ci
+```
+
+Then restart MariaDB. **Why:** MariaDB 10.10+ defaults to
+`utf8mb4_uca1400_ai_ci`, but both the Droplet (older MariaDB) and PHP's
+`mysqli::set_charset()` expect `utf8mb4_unicode_ci`. Views store the
+session collation at creation time; if the server default is wrong, UNION
+operations in views like `mlb_batter_matchup` throw "Illegal mix of
+collations" errors at runtime. `utf8mb4_unicode_ci` is the
+least-common-denominator collation that works across all MariaDB versions
+in use here.
+
 ### 1) Create the database
 
 ```sql
@@ -51,7 +70,7 @@ CREATE DATABASE fantasy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 Then load the schema:
 
 ```bash
-mysql -u root -p fantasy < schema.sql
+mysql fantasy < schema.sql
 ```
 
 ### 2) Create a Yahoo developer app
