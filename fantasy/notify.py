@@ -9,8 +9,9 @@ from fantasy.config import _pw
 _SMTP_ACCOUNT = "rlm@scareduck.com"
 
 
-def send_alert(subject: str, body: str) -> None:
-    """Send a plain-text alert email to the configured account via Fastmail."""
+def send_alert(subject: str, body: str, to: str | None = None) -> None:
+    """Send a plain-text alert email via Fastmail. Defaults to sending to self."""
+    recipient = to or _SMTP_ACCOUNT
     smtp_host_raw = _pw(_SMTP_ACCOUNT, "smtp_host", "")
     if not smtp_host_raw:
         raise RuntimeError(f"No smtp_host configured for {_SMTP_ACCOUNT} in ~/.passwords.json")
@@ -27,16 +28,16 @@ def send_alert(subject: str, body: str) -> None:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = _SMTP_ACCOUNT
-    msg["To"] = _SMTP_ACCOUNT
+    msg["To"] = recipient
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
     if smtp_port == 465:
         with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
             server.login(_SMTP_ACCOUNT, smtp_password)
-            server.sendmail(_SMTP_ACCOUNT, [_SMTP_ACCOUNT], msg.as_string())
+            server.sendmail(_SMTP_ACCOUNT, [recipient], msg.as_string())
     else:
         with smtplib.SMTP(smtp_host, smtp_port) as server:
             server.ehlo()
             server.starttls()
             server.login(_SMTP_ACCOUNT, smtp_password)
-            server.sendmail(_SMTP_ACCOUNT, [_SMTP_ACCOUNT], msg.as_string())
+            server.sendmail(_SMTP_ACCOUNT, [recipient], msg.as_string())

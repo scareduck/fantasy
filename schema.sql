@@ -452,6 +452,18 @@ CREATE OR REPLACE VIEW current_rotowire_injuries AS
 SELECT * FROM rotowire_injury_snapshot
 WHERE captured_at_utc = (SELECT MAX(captured_at_utc) FROM rotowire_injury_snapshot);
 
+-- Bench alert deduplication: one row per player per day once an alert has been sent.
+CREATE TABLE IF NOT EXISTS bench_alert (
+    bench_alert_id  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    alert_date      DATE            NOT NULL,
+    player_id       BIGINT UNSIGNED NOT NULL,
+    game_pk         INT UNSIGNED    NOT NULL,
+    sent_at_utc     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_date_player (alert_date, player_id),
+    CONSTRAINT fk_bench_alert_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- FA IL pitcher AI analysis: one row per player, upserted on each analysis run.
 CREATE TABLE IF NOT EXISTS fa_il_pitcher_analysis (
     fa_il_pitcher_analysis_id BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,

@@ -29,6 +29,7 @@ fantasy-svh-report       = "scripts.sv_holds_report:main"
 fantasy-mlb-schedule     = "scripts.mlb_schedule_sync:main"
 fantasy-il-pitchers      = "scripts.fa_il_pitcher_report:main"
 fantasy-rotowire-login   = "scripts.rotowire_login:main"
+fantasy-bench-alert      = "scripts.bench_alert:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
