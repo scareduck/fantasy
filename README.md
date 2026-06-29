@@ -62,17 +62,18 @@ least-common-denominator collation that works across all MariaDB versions
 in use here.
 
 **Important:** `collation_server` does not affect `collation_connection` for
-the CLI client. When creating or recreating UNION views from the command line,
-always set the session collation first or the view will be stored with the
-wrong collation:
+the CLI client, so UNION views that rely on session collation will silently
+store the wrong collation and throw `ERROR 1271: Illegal mix of collations for
+operation 'UNION'` at query time — even from `SHOW CREATE VIEW`. The fix is to
+annotate every string column in the view with an explicit `COLLATE`, making it
+immune to session/server collation settings:
 
 ```sql
-SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE OR REPLACE VIEW mlb_batter_matchup AS ...
+CONVERT(col USING utf8mb4) COLLATE utf8mb4_unicode_ci
 ```
 
-PHP connections are unaffected because `api.php` calls
-`SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci` immediately after connecting.
+`mlb_batter_matchup` uses this pattern on all string columns. If you see the
+error again on a different view, apply the same treatment.
 
 ### 1) Create the database
 
