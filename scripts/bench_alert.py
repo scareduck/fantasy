@@ -227,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
                 if batter["mlb_team"] not in (home_abbr, away_abbr):
                     continue
                 side = "home" if batter["mlb_team"] == home_abbr else "away"
+                if not lineup[side]:
+                    continue  # This team's half not posted yet — skip.
                 if batter["norm_name"] in lineup[side]:
                     continue
                 player_id = batter["player_id"]
@@ -246,6 +248,8 @@ def main(argv: list[str] | None = None) -> int:
                 if batter["mlb_team"] not in (home_abbr, away_abbr):
                     continue
                 side = "home" if batter["mlb_team"] == home_abbr else "away"
+                if not lineup[side]:
+                    continue  # This team's half not posted yet — skip.
                 if batter["norm_name"] not in lineup[side]:
                     continue  # Not in lineup, no alert needed.
                 player_id = batter["player_id"]
