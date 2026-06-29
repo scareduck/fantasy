@@ -1,4 +1,0 @@
-AuthType Basic
-AuthName "Fantasy Baseball"
-AuthUserFile /var/www/fantasy/.htpasswd
-Require valid-user

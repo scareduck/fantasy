@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Alert when active fantasy batters are not in the real-life MLB starting lineup."""
+"""Bench alerts:
+  Case 1 — active fantasy batter not in IRL starting lineup.
+  Case 2 — player marked "regular" is on BN but IS in IRL lineup.
+  Case 3 — probable SP is in an active fantasy slot but no longer listed as probable.
+"""
 from __future__ import annotations
 
 import json
@@ -28,7 +32,7 @@ def normalize_name(name: str) -> str:
 
 
 def fetch_lineup(game_pk: int) -> dict[str, set[str]] | None:
-    """Return {home: {name, ...}, away: {name, ...}} if lineup is posted, else None."""
+    """Return {home: {name,...}, away: {name,...}} if batting lineup is posted, else None."""
     url = f"{MLB_SCHEDULE_URL}?sportId=1&gamePk={game_pk}&hydrate=lineups"
     try:
         with urlopen(url, timeout=15) as resp:
@@ -43,12 +47,58 @@ def fetch_lineup(game_pk: int) -> dict[str, set[str]] | None:
             home_players = lineups.get("homePlayers") or []
             away_players = lineups.get("awayPlayers") or []
             if not home_players and not away_players:
-                return None  # Not posted yet
+                return None
             return {
                 "home": {normalize_name(p["fullName"]) for p in home_players},
                 "away": {normalize_name(p["fullName"]) for p in away_players},
             }
     return None
+
+
+def fetch_live_probable_pitchers(date_str: str) -> dict[int, dict[str, str | None]]:
+    """Return {game_pk: {home: norm_name|None, away: norm_name|None}} from live API."""
+    url = f"{MLB_SCHEDULE_URL}?sportId=1&date={date_str}&hydrate=probablePitcher,team"
+    try:
+        with urlopen(url, timeout=15) as resp:
+            data = json.load(resp)
+    except URLError as exc:
+        print(f"  WARNING: could not fetch live schedule: {exc}")
+        return {}
+    result: dict[int, dict[str, str | None]] = {}
+    for date_entry in data.get("dates", []):
+        for game in date_entry.get("games", []):
+            if game.get("gameType") != "R":
+                continue
+            game_pk = game["gamePk"]
+            teams = game.get("teams", {})
+            home_p = (teams.get("home") or {}).get("probablePitcher") or {}
+            away_p = (teams.get("away") or {}).get("probablePitcher") or {}
+            result[game_pk] = {
+                "home": normalize_name(home_p["fullName"]) if home_p.get("fullName") else None,
+                "away": normalize_name(away_p["fullName"]) if away_p.get("fullName") else None,
+            }
+    return result
+
+
+def already_alerted(cur, today: str, player_id: int, alert_type: str) -> bool:
+    cur.execute(
+        "SELECT 1 FROM bench_alert WHERE alert_date = ? AND player_id = ? AND alert_type = ?",
+        (today, player_id, alert_type),
+    )
+    return cur.fetchone() is not None
+
+
+def _batter_row(row: tuple, alert_type: str) -> dict:
+    return {
+        "team_key":   row[0],
+        "player_id":  row[1],
+        "full_name":  row[2],
+        "norm_name":  normalize_name(
+            f"{row[3] or ''} {row[4] or ''}".strip() or row[2]
+        ),
+        "mlb_team":   row[5] or "",
+        "alert_type": alert_type,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,17 +113,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         cur = conn.cursor()
-
-        # Active (non-BN, non-IL) batters for our teams, excluding real-life IL/NA.
         placeholders = ",".join("?" * len(our_team_keys))
+
+        # Case 1: active (non-BN/IL) batters, excluding IRL IL/NA.
         cur.execute(
             f"""
-            SELECT cr.team_key,
-                   p.player_id,
-                   p.full_name,
-                   p.ascii_first_name,
-                   p.ascii_last_name,
-                   p.editorial_team_abbr
+            SELECT cr.team_key, p.player_id, p.full_name,
+                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr
             FROM current_roster cr
             JOIN player p ON p.player_id = cr.player_id
             WHERE cr.team_key IN ({placeholders})
@@ -84,26 +130,69 @@ def main(argv: list[str] | None = None) -> int:
             """,
             our_team_keys,
         )
-        batters = [
+        active_batters = [_batter_row(r, "benched") for r in cur.fetchall()]
+
+        # Case 2: marked-regular batters currently on BN, excluding IRL IL/NA.
+        cur.execute(
+            f"""
+            SELECT cr.team_key, p.player_id, p.full_name,
+                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr
+            FROM current_roster cr
+            JOIN player p ON p.player_id = cr.player_id
+            JOIN player_regular pr ON pr.player_id = cr.player_id
+            WHERE cr.team_key IN ({placeholders})
+              AND cr.selected_position = 'BN'
+              AND p.position_type = 'B'
+              AND (p.yahoo_status IS NULL
+                   OR (p.yahoo_status NOT LIKE 'IL%' AND p.yahoo_status != 'NA'))
+            """,
+            our_team_keys,
+        )
+        bench_regulars = [_batter_row(r, "regular_benched") for r in cur.fetchall()]
+
+        # Case 3: active SP-slot pitchers who were the probable starter for a game today.
+        cur.execute(
+            f"""
+            SELECT cr.team_key, p.player_id, p.full_name,
+                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr,
+                   s.game_pk, s.home_team_abbr, s.away_team_abbr,
+                   CASE WHEN s.home_pitcher_player_id = p.player_id THEN 'home' ELSE 'away' END AS side
+            FROM current_roster cr
+            JOIN player p ON p.player_id = cr.player_id
+            JOIN mlb_schedule s
+              ON (s.home_pitcher_player_id = p.player_id OR s.away_pitcher_player_id = p.player_id)
+             AND s.game_date = CURDATE()
+             AND s.game_datetime_utc > UTC_TIMESTAMP() - INTERVAL 30 MINUTE
+            WHERE cr.team_key IN ({placeholders})
+              AND cr.selected_position NOT IN ('BN', 'IL')
+              AND p.position_type = 'P'
+              AND (p.yahoo_status IS NULL
+                   OR (p.yahoo_status NOT LIKE 'IL%' AND p.yahoo_status != 'NA'))
+            """,
+            our_team_keys,
+        )
+        probable_pitchers = [
             {
-                "team_key":  row[0],
-                "player_id": row[1],
-                "full_name": row[2],
-                "norm_name": normalize_name(
+                "team_key":   row[0],
+                "player_id":  row[1],
+                "full_name":  row[2],
+                "norm_name":  normalize_name(
                     f"{row[3] or ''} {row[4] or ''}".strip() or row[2]
                 ),
-                "mlb_team":  row[5] or "",
+                "mlb_team":   row[5] or "",
+                "game_pk":    row[6],
+                "home":       row[7],
+                "away":       row[8],
+                "side":       row[9],
+                "alert_type": "scratched",
             }
             for row in cur.fetchall()
         ]
 
-        if not batters:
-            print("No active batters found for our teams.")
-            return 0
+        # Collect MLB teams needed for lineup fetches (Cases 1 & 2).
+        batter_teams = {b["mlb_team"] for b in active_batters + bench_regulars}
 
-        mlb_teams = {b["mlb_team"] for b in batters}
-
-        # Today's games that haven't started yet (30-min grace window).
+        # Today's relevant games (within 30-min grace window).
         cur.execute("""
             SELECT game_pk, home_team_abbr, away_team_abbr
             FROM mlb_schedule
@@ -113,22 +202,17 @@ def main(argv: list[str] | None = None) -> int:
         games = [
             {"game_pk": row[0], "home": row[1], "away": row[2]}
             for row in cur.fetchall()
-            if row[1] in mlb_teams or row[2] in mlb_teams
+            if row[1] in batter_teams or row[2] in batter_teams
         ]
 
-        if not games:
-            print("No upcoming games today for our active batters.")
-            return 0
+        # email -> [(alert_type, line)]
+        alerts_by_email: dict[str, list[tuple[str, str]]] = {}
+        # (today, player_id, game_pk, alert_type)
+        new_alerts: list[tuple[str, int, int, str]] = []
 
-        print(
-            f"Checking {len(games)} game(s) for {len(batters)} active batter(s)..."
-        )
-
-        alerts_by_email: dict[str, list[str]] = {}
-        new_alerts: list[tuple[str, int, int]] = []  # (today, player_id, game_pk)
-
+        # ── Cases 1 & 2: check batting lineups per game ───────────────────────
         for game in games:
-            game_pk  = game["game_pk"]
+            game_pk   = game["game_pk"]
             home_abbr = game["home"]
             away_abbr = game["away"]
 
@@ -139,52 +223,102 @@ def main(argv: list[str] | None = None) -> int:
 
             print(f"  {away_abbr} @ {home_abbr}: lineup posted.")
 
-            for batter in batters:
-                mlb_team = batter["mlb_team"]
-                if mlb_team not in (home_abbr, away_abbr):
+            for batter in active_batters:
+                if batter["mlb_team"] not in (home_abbr, away_abbr):
                     continue
-
-                side = "home" if mlb_team == home_abbr else "away"
+                side = "home" if batter["mlb_team"] == home_abbr else "away"
                 if batter["norm_name"] in lineup[side]:
-                    continue  # In the lineup, all good.
-
+                    continue
                 player_id = batter["player_id"]
-
-                # Check dedup table.
-                cur.execute(
-                    "SELECT 1 FROM bench_alert WHERE alert_date = ? AND player_id = ?",
-                    (today, player_id),
+                if already_alerted(cur, today, player_id, "benched"):
+                    continue
+                line = (
+                    f"{batter['full_name']} ({batter['mlb_team']}) "
+                    f"— not in lineup ({away_abbr} @ {home_abbr})"
                 )
-                if cur.fetchone():
-                    continue  # Already alerted today.
+                print(f"  BENCH: {line}")
+                alerts_by_email.setdefault(team_to_email[batter["team_key"]], []).append(
+                    ("benched", line)
+                )
+                new_alerts.append((today, player_id, game_pk, "benched"))
 
-                matchup = f"{away_abbr} @ {home_abbr}"
-                line = f"{batter['full_name']} ({mlb_team}) — not in lineup ({matchup})"
-                print(f"  ALERT: {line}")
+            for batter in bench_regulars:
+                if batter["mlb_team"] not in (home_abbr, away_abbr):
+                    continue
+                side = "home" if batter["mlb_team"] == home_abbr else "away"
+                if batter["norm_name"] not in lineup[side]:
+                    continue  # Not in lineup, no alert needed.
+                player_id = batter["player_id"]
+                if already_alerted(cur, today, player_id, "regular_benched"):
+                    continue
+                line = (
+                    f"{batter['full_name']} ({batter['mlb_team']}) "
+                    f"— in lineup but sitting on your bench ({away_abbr} @ {home_abbr})"
+                )
+                print(f"  REGULAR: {line}")
+                alerts_by_email.setdefault(team_to_email[batter["team_key"]], []).append(
+                    ("regular_benched", line)
+                )
+                new_alerts.append((today, player_id, game_pk, "regular_benched"))
 
-                email = team_to_email[batter["team_key"]]
-                alerts_by_email.setdefault(email, []).append(line)
-                new_alerts.append((today, player_id, game_pk))
+        # ── Case 3: check for scratched probable starters ─────────────────────
+        if probable_pitchers:
+            live_probables = fetch_live_probable_pitchers(today)
+            for pitcher in probable_pitchers:
+                game_pk = pitcher["game_pk"]
+                side    = pitcher["side"]
+                current = (live_probables.get(game_pk) or {}).get(side)
+                if current and current == pitcher["norm_name"]:
+                    continue  # Still the listed probable — all good.
+                player_id = pitcher["player_id"]
+                if already_alerted(cur, today, player_id, "scratched"):
+                    continue
+                matchup = f"{pitcher['away']} @ {pitcher['home']}"
+                line = (
+                    f"{pitcher['full_name']} ({pitcher['mlb_team']}) "
+                    f"— expected to start {matchup} but no longer listed as probable"
+                )
+                print(f"  SCRATCH: {line}")
+                alerts_by_email.setdefault(team_to_email[pitcher["team_key"]], []).append(
+                    ("scratched", line)
+                )
+                new_alerts.append((today, player_id, game_pk, "scratched"))
 
-        # Send emails.
-        for email, lines in alerts_by_email.items():
-            subject = (
-                f"Bench Alert: {len(lines)} player{'s' if len(lines) != 1 else ''} "
-                f"sitting today"
-            )
-            body = (
-                "The following active roster players are NOT in today's MLB lineup:\n\n"
-                + "\n".join(f"  • {line}" for line in lines)
-                + "\n\nCheck your lineup — you may want to make a substitution."
-            )
+        # ── Send one combined email per owner ─────────────────────────────────
+        for email, tagged_lines in alerts_by_email.items():
+            benched   = [l for t, l in tagged_lines if t == "benched"]
+            regulars  = [l for t, l in tagged_lines if t == "regular_benched"]
+            scratched = [l for t, l in tagged_lines if t == "scratched"]
+
+            sections: list[str] = []
+            if benched:
+                sections.append(
+                    "ACTIVE PLAYERS NOT IN LINEUP\n"
+                    + "\n".join(f"  • {l}" for l in benched)
+                )
+            if regulars:
+                sections.append(
+                    "REGULARS SITTING ON YOUR BENCH\n"
+                    + "\n".join(f"  • {l}" for l in regulars)
+                )
+            if scratched:
+                sections.append(
+                    "STARTING PITCHERS SCRATCHED\n"
+                    + "\n".join(f"  • {l}" for l in scratched)
+                )
+
+            n = len(tagged_lines)
+            subject = f"Bench Alert: {n} issue{'s' if n != 1 else ''} today"
+            body = "\n\n".join(sections) + "\n\nCheck your lineup."
             send_alert(subject, body, to=email)
             print(f"  Sent alert to {email}")
 
-        # Record alerts after sending (so a send failure doesn't silently suppress future alerts).
-        for alert_date, player_id, game_pk in new_alerts:
+        # Record after sending so a send failure does not suppress future alerts.
+        for alert_date, player_id, game_pk, alert_type in new_alerts:
             cur.execute(
-                "INSERT IGNORE INTO bench_alert (alert_date, player_id, game_pk) VALUES (?, ?, ?)",
-                (alert_date, player_id, game_pk),
+                "INSERT IGNORE INTO bench_alert "
+                "(alert_date, player_id, game_pk, alert_type) VALUES (?, ?, ?, ?)",
+                (alert_date, player_id, game_pk, alert_type),
             )
 
         conn.commit()

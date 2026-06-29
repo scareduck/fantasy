@@ -173,12 +173,15 @@ if ($type === 'matchups') {
 
     $stmt = $conn->prepare("
         SELECT
+            p.player_id                                                     AS player_id,
             p.full_name                                                     AS batter,
             p.yahoo_player_key                                              AS player_key,
             p.editorial_team_abbr                                           AS batter_team,
             p.display_position                                              AS display_position,
             cr.selected_position                                            AS slot,
             COALESCE(p.yahoo_status, '')                                    AS yahoo_status,
+            EXISTS(SELECT 1 FROM player_regular pr
+                   WHERE pr.player_id = p.player_id)                       AS is_regular,
             COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
             COALESCE(opp_p.yahoo_player_key, sched_p.yahoo_player_key)     AS opp_player_key,
             COALESCE(opp.team_abbr, bmatch.pitcher_team)                   AS pitcher_team,
@@ -209,6 +212,8 @@ if ($type === 'matchups') {
     $result = $stmt->get_result();
     $rows = [];
     while ($row = $result->fetch_assoc()) {
+        $row['player_id'] = (int)$row['player_id'];
+        $row['is_regular'] = (bool)$row['is_regular'];
         $row['fpts']     = $row['fpts']     !== null ? (float)$row['fpts'] : null;
         $row['era']      = $row['era']      !== null ? (float)$row['era']  : null;
         $row['has_game'] = (bool)$row['has_game'];
@@ -216,6 +221,45 @@ if ($type === 'matchups') {
     }
     $conn->close();
     echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+if ($type === 'toggle_regular') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'POST required']);
+        exit;
+    }
+    $body = json_decode(file_get_contents('php://input'), true);
+    $player_id = isset($body['player_id']) ? (int)$body['player_id'] : 0;
+    if (!$player_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'player_id required']);
+        exit;
+    }
+    $team_key = isset($body['team_key']) ? trim($body['team_key']) : '';
+
+    $chk = $conn->prepare("SELECT 1 FROM player_regular WHERE player_id = ?");
+    $chk->bind_param('i', $player_id);
+    $chk->execute();
+    $exists = $chk->get_result()->num_rows > 0;
+    $chk->close();
+
+    if ($exists) {
+        $stmt = $conn->prepare("DELETE FROM player_regular WHERE player_id = ?");
+        $stmt->bind_param('i', $player_id);
+        $stmt->execute();
+        $stmt->close();
+        $conn->close();
+        echo json_encode(['is_regular' => false]);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO player_regular (player_id, set_by_team_key) VALUES (?, ?)");
+        $stmt->bind_param('is', $player_id, $team_key);
+        $stmt->execute();
+        $stmt->close();
+        $conn->close();
+        echo json_encode(['is_regular' => true]);
+    }
     exit;
 }
 

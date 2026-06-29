@@ -112,6 +112,10 @@ tbody td a { color: inherit; text-decoration: none; }
 tbody td a:hover { text-decoration: underline; }
 .bref-link { font-size: 11px; color: #5f6368; }
 
+.reg-toggle { cursor: pointer; font-size: 15px; user-select: none; line-height: 1; }
+.reg-on  { color: #f9ab00; }
+.reg-off { color: #bdc1c6; }
+
 .footer {
   padding: 6px 14px; font-size: 11px; color: #80868b;
   border-top: 1px solid #ebebeb; background: #fafafa;
@@ -240,6 +244,12 @@ const COLS = {
           out += " " + slotBadge(s, cls);
         }
         return out;
+      } },
+    { label: "Reg", key: "player_id",
+      fmt: (v, r) => {
+        const on  = r.is_regular;
+        const cls = on ? "reg-on" : "reg-off";
+        return "<span class=\"reg-toggle " + cls + "\" data-pid=\"" + v + "\">" + (on ? "★" : "☆") + "</span>";
       } },
     { label: "Opp Pitcher", key: "opp_pitcher",
       fmt: (v, r) => {
@@ -378,6 +388,26 @@ document.getElementById("team-select").addEventListener("change", function() {
   activeTeam = this.value;
   if (OUR_TEAMS.indexOf(activeTeam) !== -1) setCookie("fantasy_team", activeTeam);
   load();
+});
+
+document.getElementById("tbody").addEventListener("click", function(e) {
+  var tog = e.target.closest(".reg-toggle");
+  if (!tog) return;
+  var pid = parseInt(tog.dataset.pid, 10);
+  fetch("api.php?type=toggle_regular", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({player_id: pid, team_key: activeTeam})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.error) { console.error(data.error); return; }
+    tog.textContent = data.is_regular ? "★" : "☆";
+    tog.className = "reg-toggle " + (data.is_regular ? "reg-on" : "reg-off");
+    var ckey = activeTeam + "|" + activeMatchupDate;
+    delete cache.matchups[ckey];
+  })
+  .catch(function(err) { console.error(err); });
 });
 
 // Populate matchup date dropdown.

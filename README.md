@@ -61,6 +61,19 @@ collations" errors at runtime. `utf8mb4_unicode_ci` is the
 least-common-denominator collation that works across all MariaDB versions
 in use here.
 
+**Important:** `collation_server` does not affect `collation_connection` for
+the CLI client. When creating or recreating UNION views from the command line,
+always set the session collation first or the view will be stored with the
+wrong collation:
+
+```sql
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE OR REPLACE VIEW mlb_batter_matchup AS ...
+```
+
+PHP connections are unaffected because `api.php` calls
+`SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci` immediately after connecting.
+
 ### 1) Create the database
 
 ```sql

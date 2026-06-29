@@ -458,9 +458,20 @@ CREATE TABLE IF NOT EXISTS bench_alert (
     alert_date      DATE            NOT NULL,
     player_id       BIGINT UNSIGNED NOT NULL,
     game_pk         INT UNSIGNED    NOT NULL,
+    alert_type      VARCHAR(20)     NOT NULL DEFAULT 'benched',
     sent_at_utc     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_date_player (alert_date, player_id),
+    UNIQUE KEY uq_date_player_type (alert_date, player_id, alert_type),
     CONSTRAINT fk_bench_alert_player
+        FOREIGN KEY (player_id) REFERENCES player (player_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Marks a player as a "regular" for bench alert Case 2: alert when they're on
+-- the fantasy bench but are in the IRL starting lineup.
+CREATE TABLE IF NOT EXISTS player_regular (
+    player_id       BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    set_by_team_key VARCHAR(64),
+    created_at_utc  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_player_regular_player
         FOREIGN KEY (player_id) REFERENCES player (player_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
