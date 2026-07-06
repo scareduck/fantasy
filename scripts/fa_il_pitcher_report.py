@@ -51,15 +51,19 @@ High-quality standard (is_high_quality):
   credentials (e.g., former All-Star, ace-level track record).
 
 Return date estimation:
-  Use specific dates from news when available.
+  A specific date reported by a source (e.g. Rotowire's expected-return
+  date, or a specific date mentioned in a news update) always takes
+  precedence, even for Tommy John surgery or UCL repair/reconstruction —
+  do not override a reported date with a generic recovery-timeline rule.
   For vague language ("late June" → June 26, "mid-July" → July 15,
-  "early August" → August 5). Always set return_date_is_estimate = true
-  when inferring from vague language or when no date is mentioned.
-  For Tommy John surgery: always estimate 18 months from the surgery date
-  (use the transaction or news date if available, otherwise today's date).
-  Always set return_date_is_estimate = true for Tommy John estimates.
+  "early August" → August 5), infer a date and set
+  return_date_is_estimate = true.
+  Only when no source gives any date at all: for Tommy John surgery or
+  UCL repair/reconstruction, estimate 18 months from the surgery date
+  (use the transaction or news date if available, otherwise today's date),
+  and set return_date_is_estimate = true.
   Set return_date = null only if there is genuinely no information and the
-  injury is not Tommy John surgery.
+  injury is not Tommy John/UCL surgery.
 
 Today's date: """ + datetime.now(timezone.utc).strftime("%Y-%m-%d") + """
 
@@ -141,12 +145,13 @@ def _fetch_txn_chunk(start: str, end: str) -> list[dict]:
         return json.load(resp).get("transactions", [])
 
 
-def fetch_il_transactions(season: int) -> dict[str, list[str]]:
-    """Return a map of normalized player name -> list of IL placement descriptions
-    for the given season. Fetches month-by-month to avoid the 2000-record API cap.
+def fetch_il_transactions(season: int) -> dict[str, list[tuple[str, str]]]:
+    """Return a map of normalized player name -> list of (date, description)
+    IL placement/rehab records for the given season, oldest first. Fetches
+    month-by-month to avoid the 2000-record API cap.
     """
     today    = date.today()
-    result: dict[str, list[str]] = {}
+    result: dict[str, list[tuple[str, str]]] = {}
     month_start = date(season, 3, 1)  # MLB season starts in March
 
     while month_start <= today:
@@ -164,7 +169,7 @@ def fetch_il_transactions(season: int) -> dict[str, list[str]]:
             name = txn.get("person", {}).get("fullName", "")
             if not name:
                 continue
-            result.setdefault(_normalize_name(name), []).append(desc)
+            result.setdefault(_normalize_name(name), []).append((txn.get("date", ""), desc))
         month_start = next_month
 
     return result
@@ -334,7 +339,7 @@ def get_fa_il_pitchers(conn: mariadb.Connection, *, player_name: str | None,
     return cur.fetchall()
 
 
-def build_user_message(pitcher: dict, il_txns: dict[str, list[str]],
+def build_user_message(pitcher: dict, il_txns: dict[str, list[tuple[str, str]]],
                         espn_notes: dict[str, str],
                         rw_notes: dict[str, str] | None = None) -> str:
     name    = pitcher["full_name"]
@@ -351,16 +356,18 @@ def build_user_message(pitcher: dict, il_txns: dict[str, list[str]],
         lines.append(f"Injury note from Yahoo: {pitcher['injury_note']}")
 
     key = _normalize_name(name)
-    injury_update = (rw_notes or {}).get(key) or espn_notes.get(key)
-    if injury_update:
-        source = "Rotowire" if (rw_notes or {}).get(key) else "ESPN"
-        lines.append(f"Injury update ({source}): {injury_update}")
+    rw_note = (rw_notes or {}).get(key)
+    espn_note = espn_notes.get(key)
+    if rw_note:
+        lines.append(f"Injury update (Rotowire): {rw_note}")
+    if espn_note:
+        lines.append(f"Injury update (ESPN): {espn_note}")
 
-    txn_descs = il_txns.get(_normalize_name(name), [])
-    if txn_descs:
-        lines.append(f"MLB transaction record(s):")
-        for desc in txn_descs[-3:]:  # most recent up to 3
-            lines.append(f"  - {desc}")
+    txns = il_txns.get(key, [])
+    if txns:
+        lines.append(f"MLB transaction record(s), oldest to most recent:")
+        for txn_date, desc in txns[-3:]:  # most recent up to 3
+            lines.append(f"  - {txn_date}: {desc}")
 
     if pitcher["yahoo_status_full"]:
         lines.append(f"Yahoo status detail: {pitcher['yahoo_status_full']}")
@@ -386,7 +393,7 @@ def build_user_message(pitcher: dict, il_txns: dict[str, list[str]],
 def analyze_pitcher(
     anthropic_client: anthropic.Anthropic,
     pitcher: dict,
-    il_txns: dict[str, list[str]],
+    il_txns: dict[str, list[tuple[str, str]]],
     espn_notes: dict[str, str],
     rw_notes: dict[str, str] | None = None,
 ) -> dict:
