@@ -8,10 +8,17 @@ from urllib.request import urlopen
 from urllib.error import URLError
 
 from fantasy.config import load_db_sync_settings
-from fantasy.db import connect, load_pitcher_name_team_maps, upsert_mlb_game
+from fantasy.db import (
+    connect,
+    get_player_ids_missing_throws,
+    load_pitcher_name_team_maps,
+    update_player_throws,
+    upsert_mlb_game,
+)
 from fantasy.espn_forecaster import correlate_forecaster_row, normalize_team_abbr
 
 MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule"
+MLB_PEOPLE_URL   = "https://statsapi.mlb.com/api/v1/people"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -65,6 +72,22 @@ def extract_game(game: dict) -> dict:
     }
 
 
+def fetch_pitch_hands(mlb_ids: list[int]) -> dict[int, str]:
+    """Return a map of MLB person id -> pitching hand ('L' or 'R')."""
+    result: dict[int, str] = {}
+    chunk_size = 50
+    for i in range(0, len(mlb_ids), chunk_size):
+        chunk = mlb_ids[i:i + chunk_size]
+        url = f"{MLB_PEOPLE_URL}?personIds={','.join(str(i) for i in chunk)}"
+        with urlopen(url, timeout=30) as resp:
+            data = json.load(resp)
+        for person in data.get("people", []):
+            hand = (person.get("pitchHand") or {}).get("code")
+            if hand:
+                result[person["id"]] = hand
+    return result
+
+
 def resolve_pitcher(
     name: str | None,
     team_abbr: str | None,
@@ -103,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         full_map, ascii_map = load_pitcher_name_team_maps(conn)
 
         upserted = 0
+        pitcher_mlb_id_by_player_id: dict[int, int] = {}
         for game in games:
             row = extract_game(game)
             row["home_pitcher_player_id"] = resolve_pitcher(
@@ -111,11 +135,29 @@ def main(argv: list[str] | None = None) -> int:
             row["away_pitcher_player_id"] = resolve_pitcher(
                 row["away_pitcher_name"], row["away_team_abbr"], full_map, ascii_map
             )
+            for side in ("home", "away"):
+                pid = row[f"{side}_pitcher_player_id"]
+                mlb_id = row[f"{side}_pitcher_mlb_id"]
+                if pid and mlb_id:
+                    pitcher_mlb_id_by_player_id[pid] = mlb_id
             upsert_mlb_game(conn, **row)
             upserted += 1
 
         conn.commit()
         print(f"Upserted {upserted} games")
+
+        missing = get_player_ids_missing_throws(conn, list(pitcher_mlb_id_by_player_id))
+        if missing:
+            print(f"Fetching pitching hand for {len(missing)} pitcher(s)...")
+            hands = fetch_pitch_hands([pitcher_mlb_id_by_player_id[pid] for pid in missing])
+            updated = 0
+            for pid in missing:
+                hand = hands.get(pitcher_mlb_id_by_player_id[pid])
+                if hand:
+                    update_player_throws(conn, pid, hand)
+                    updated += 1
+            conn.commit()
+            print(f"Cached throws for {updated} pitcher(s)")
     except Exception:
         conn.rollback()
         raise

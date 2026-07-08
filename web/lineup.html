@@ -100,6 +100,8 @@ tbody tr:last-child td { border-bottom: none; }
 .status-il  { background: #fce8e6; color: #c5221f; }
 .status-dtd { background: #fef7e0; color: #7d5600; }
 .status-na  { background: #f1f3f4; color: #5f6368; }
+.throws-l   { background: #f3e8fd; color: #8430ce; }
+.throws-r   { background: #e8f0fe; color: #1a73e8; }
 
 .fpts-hi   { color: #137333; font-weight: 700; }
 .fpts-mid  { color: #1a73e8; font-weight: 600; }
@@ -253,7 +255,11 @@ const COLS = {
       } },
     { label: "Opp Pitcher", key: "opp_pitcher",
       fmt: (v, r) => {
-        if (v) return ylink(v, r.opp_player_key);
+        if (v) {
+          let out = ylink(v, r.opp_player_key);
+          if (r.opp_throws) out += " " + slotBadge(r.opp_throws, r.opp_throws === "L" ? "throws-l" : "throws-r");
+          return out;
+        }
         return r.has_game
           ? `<span class="fpts-none">TBD</span>`
           : `<span class="fpts-none">off day</span>`;

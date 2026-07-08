@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS player (
     eligible_positions_json JSON NULL,
     yahoo_status VARCHAR(64) NULL,
     yahoo_status_full VARCHAR(255) NULL,
+    throws CHAR(1) NULL COMMENT 'Pitching hand: L or R, from MLB Stats API',
     raw_player_xml LONGTEXT NULL,
     created_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

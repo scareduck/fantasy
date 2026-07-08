@@ -184,6 +184,7 @@ if ($type === 'matchups') {
                    WHERE pr.player_id = p.player_id)                       AS is_regular,
             COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
             COALESCE(opp_p.yahoo_player_key, sched_p.yahoo_player_key)     AS opp_player_key,
+            COALESCE(opp_p.throws, sched_p.throws)                        AS opp_throws,
             COALESCE(opp.team_abbr, bmatch.pitcher_team)                   AS pitcher_team,
             COALESCE(opp.matchup_text, bmatch.matchup_text)                AS matchup,
             CAST(opp.projection_text AS DECIMAL(6,2))                      AS fpts,
