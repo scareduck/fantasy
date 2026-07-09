@@ -718,17 +718,24 @@ def upsert_mlb_game(
     )
 
 
-def get_player_ids_missing_throws(conn: mariadb.Connection, player_ids: list[int]) -> list[int]:
-    """Return the subset of player_ids whose `throws` handedness is not yet cached."""
-    if not player_ids:
-        return []
-    cur = conn.cursor()
-    placeholders = ",".join("?" * len(player_ids))
+def get_pitchers_missing_throws(conn: mariadb.Connection) -> list[dict]:
+    """Return player_id/full_name for every pitcher-type player with no cached
+    `throws` handedness yet, regardless of which pipeline resolved them."""
+    cur = conn.cursor(dictionary=True)
     cur.execute(
-        f"SELECT player_id FROM player WHERE player_id IN ({placeholders}) AND throws IS NULL",
-        player_ids,
+        """
+        SELECT player_id, full_name
+        FROM player
+        WHERE throws IS NULL
+          AND (
+              position_type = 'P'
+              OR display_position LIKE '%SP%'
+              OR display_position LIKE '%RP%'
+              OR display_position = 'P'
+          )
+        """
     )
-    return [int(row[0]) for row in cur.fetchall()]
+    return cur.fetchall()
 
 
 def update_player_throws(conn: mariadb.Connection, player_id: int, throws: str) -> None:
