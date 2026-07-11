@@ -172,41 +172,49 @@ if ($type === 'matchups') {
     $match_md = date('n/j', strtotime($match_date));
 
     $stmt = $conn->prepare("
-        SELECT
-            p.player_id                                                     AS player_id,
-            p.full_name                                                     AS batter,
-            p.yahoo_player_key                                              AS player_key,
-            p.editorial_team_abbr                                           AS batter_team,
-            p.display_position                                              AS display_position,
-            cr.selected_position                                            AS slot,
-            COALESCE(p.yahoo_status, '')                                    AS yahoo_status,
-            EXISTS(SELECT 1 FROM player_regular pr
-                   WHERE pr.player_id = p.player_id)                       AS is_regular,
-            COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
-            COALESCE(opp_p.yahoo_player_key, sched_p.yahoo_player_key)     AS opp_player_key,
-            COALESCE(opp_p.throws, sched_p.throws)                        AS opp_throws,
-            COALESCE(opp.team_abbr, bmatch.pitcher_team)                   AS pitcher_team,
-            COALESCE(opp.matchup_text, bmatch.matchup_text)                AS matchup,
-            CAST(opp.projection_text AS DECIMAL(6,2))                      AS fpts,
-            CAST(cps.era AS DECIMAL(6,2))                                  AS era,
-            (bmatch.game_date IS NOT NULL)                                 AS has_game
-        FROM current_roster cr
-        JOIN player p ON p.player_id = cr.player_id
-        LEFT JOIN mlb_batter_matchup bmatch
-            ON  bmatch.batter_team = p.editorial_team_abbr
-            AND bmatch.game_date = ?
-        LEFT JOIN current_espn_forecast opp
-            ON  opp.opponent_team_abbr = p.editorial_team_abbr
-            AND opp.matchup_text LIKE CONCAT('%', ?, '%')
-            AND opp.projection_text IS NOT NULL
-        LEFT JOIN player opp_p ON opp_p.player_id = opp.player_id
-        LEFT JOIN player sched_p ON sched_p.player_id = bmatch.opp_pitcher_player_id
-        LEFT JOIN current_pitcher_stats cps
-            ON cps.player_id = COALESCE(opp.player_id, bmatch.opp_pitcher_player_id)
-        WHERE p.position_type = 'B'
-          AND cr.team_key = ?
-        ORDER BY FIELD(cr.selected_position, 'C','1B','2B','3B','SS','OF','Util','BN'),
-                 fpts DESC
+        SELECT * FROM (
+            SELECT
+                p.player_id                                                     AS player_id,
+                p.full_name                                                     AS batter,
+                p.yahoo_player_key                                              AS player_key,
+                p.editorial_team_abbr                                           AS batter_team,
+                p.display_position                                              AS display_position,
+                cr.selected_position                                            AS slot,
+                COALESCE(p.yahoo_status, '')                                    AS yahoo_status,
+                EXISTS(SELECT 1 FROM player_regular pr
+                       WHERE pr.player_id = p.player_id)                       AS is_regular,
+                COALESCE(opp.pitcher_name, bmatch.opp_pitcher_name)            AS opp_pitcher,
+                COALESCE(opp_p.yahoo_player_key, sched_p.yahoo_player_key)     AS opp_player_key,
+                COALESCE(opp_p.throws, sched_p.throws)                        AS opp_throws,
+                COALESCE(opp.team_abbr, bmatch.pitcher_team)                   AS pitcher_team,
+                COALESCE(opp.matchup_text, bmatch.matchup_text)                AS matchup,
+                CAST(opp.projection_text AS DECIMAL(6,2))                      AS fpts,
+                CAST(cps.era AS DECIMAL(6,2))                                  AS era,
+                (bmatch.game_date IS NOT NULL)                                 AS has_game,
+                COALESCE(bmatch.game_number, 1)                                AS game_number,
+                MAX(CAST(opp.projection_text AS DECIMAL(6,2)))
+                    OVER (PARTITION BY p.player_id)                            AS player_max_fpts
+            FROM current_roster cr
+            JOIN player p ON p.player_id = cr.player_id
+            LEFT JOIN mlb_batter_matchup bmatch
+                ON  bmatch.batter_team = p.editorial_team_abbr
+                AND bmatch.game_date = ?
+            LEFT JOIN current_espn_forecast opp
+                ON  opp.opponent_team_abbr = p.editorial_team_abbr
+                AND opp.matchup_text LIKE CONCAT('%', ?, '%')
+                AND opp.projection_text IS NOT NULL
+                AND (bmatch.opp_pitcher_name IS NULL OR opp.pitcher_name = bmatch.opp_pitcher_name)
+            LEFT JOIN player opp_p ON opp_p.player_id = opp.player_id
+            LEFT JOIN player sched_p ON sched_p.player_id = bmatch.opp_pitcher_player_id
+            LEFT JOIN current_pitcher_stats cps
+                ON cps.player_id = COALESCE(opp.player_id, bmatch.opp_pitcher_player_id)
+            WHERE p.position_type = 'B'
+              AND cr.team_key = ?
+        ) t
+        ORDER BY FIELD(slot, 'C','1B','2B','3B','SS','OF','Util','BN'),
+                 player_max_fpts DESC,
+                 player_id,
+                 game_number ASC
     ");
     $stmt->bind_param('sss', $match_date, $match_md, $team_key);
     $stmt->execute();

@@ -175,7 +175,12 @@ def parse_espn_forecaster_rows(html: str) -> tuple[list[dict], str | None]:
                 opponent_team_abbr = None
                 matchup_text = None
             else:
-                opponent_team_abbr = normalize_team_abbr(opp_text.lstrip("@"))
+                # Strip a trailing "(Gm. 1)"/"(Gm. 2)" doubleheader marker before
+                # deriving the team abbreviation -- normalize_team_abbr only
+                # strips non-letters, so left in place it turns "PIT (Gm. 1)"
+                # into the bogus abbreviation "PITGM".
+                opp_team_text = re.sub(r"\s*\([^)]*\)\s*$", "", opp_text).strip()
+                opponent_team_abbr = normalize_team_abbr(opp_team_text.lstrip("@"))
                 date_str = raw_date.replace(",", "").strip()
                 matchup_text = f"{date_str}-{opp_text}" if date_str else opp_text
 

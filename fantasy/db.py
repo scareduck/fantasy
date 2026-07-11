@@ -677,6 +677,7 @@ def upsert_mlb_game(
     game_pk: int,
     game_date: str,
     game_datetime_utc: str | None,
+    game_number: int,
     home_team_abbr: str,
     away_team_abbr: str,
     home_pitcher_name: str | None,
@@ -690,15 +691,16 @@ def upsert_mlb_game(
     cur.execute(
         """
         INSERT INTO mlb_schedule (
-            game_pk, game_date, game_datetime_utc,
+            game_pk, game_date, game_datetime_utc, game_number,
             home_team_abbr, away_team_abbr,
             home_pitcher_name, home_pitcher_mlb_id, home_pitcher_player_id,
             away_pitcher_name, away_pitcher_mlb_id, away_pitcher_player_id,
             captured_at_utc
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
         ON DUPLICATE KEY UPDATE
             game_date              = VALUES(game_date),
             game_datetime_utc      = VALUES(game_datetime_utc),
+            game_number             = VALUES(game_number),
             home_team_abbr         = VALUES(home_team_abbr),
             away_team_abbr         = VALUES(away_team_abbr),
             home_pitcher_name      = VALUES(home_pitcher_name),
@@ -710,7 +712,7 @@ def upsert_mlb_game(
             captured_at_utc        = UTC_TIMESTAMP()
         """,
         (
-            game_pk, game_date, game_datetime_utc,
+            game_pk, game_date, game_datetime_utc, game_number,
             home_team_abbr, away_team_abbr,
             home_pitcher_name, home_pitcher_mlb_id, home_pitcher_player_id,
             away_pitcher_name, away_pitcher_mlb_id, away_pitcher_player_id,

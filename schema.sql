@@ -419,6 +419,7 @@ CREATE TABLE IF NOT EXISTS mlb_schedule (
     game_pk                  INT UNSIGNED    NOT NULL,
     game_date                DATE            NOT NULL,
     game_datetime_utc        DATETIME,
+    game_number              TINYINT UNSIGNED NOT NULL DEFAULT 1,
     home_team_abbr           VARCHAR(16)     NOT NULL,
     away_team_abbr           VARCHAR(16)     NOT NULL,
     home_pitcher_name        VARCHAR(255),
@@ -507,8 +508,15 @@ SELECT
     CONVERT(home_pitcher_name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS opp_pitcher_name,
     home_pitcher_mlb_id                                                  AS opp_pitcher_mlb_id,
     home_pitcher_player_id                                               AS opp_pitcher_player_id,
-    CONVERT(CONCAT(DATE_FORMAT(game_date,'%a %c/%e'),'-@',home_team_abbr) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS matchup_text
-FROM mlb_schedule
+    game_number                                                          AS game_number,
+    CONVERT(CONCAT(
+        DATE_FORMAT(game_date,'%a %c/%e'), '-@', home_team_abbr,
+        IF(dh_count > 1, CONCAT(' (Gm. ', game_number, ')'), '')
+    ) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS matchup_text
+FROM (
+    SELECT *, COUNT(*) OVER (PARTITION BY home_team_abbr, away_team_abbr, game_date) AS dh_count
+    FROM mlb_schedule
+) s
 UNION ALL
 SELECT
     game_date,
@@ -518,8 +526,15 @@ SELECT
     CONVERT(away_pitcher_name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS opp_pitcher_name,
     away_pitcher_mlb_id                                                  AS opp_pitcher_mlb_id,
     away_pitcher_player_id                                               AS opp_pitcher_player_id,
-    CONVERT(CONCAT(DATE_FORMAT(game_date,'%a %c/%e'),'-',away_team_abbr) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS matchup_text
-FROM mlb_schedule;
+    game_number                                                          AS game_number,
+    CONVERT(CONCAT(
+        DATE_FORMAT(game_date,'%a %c/%e'), '-', away_team_abbr,
+        IF(dh_count > 1, CONCAT(' (Gm. ', game_number, ')'), '')
+    ) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS matchup_text
+FROM (
+    SELECT *, COUNT(*) OVER (PARTITION BY home_team_abbr, away_team_abbr, game_date) AS dh_count
+    FROM mlb_schedule
+) s;
 
 -- Current batter season stats: the most recent batter stats sync.
 CREATE OR REPLACE VIEW current_batter_stats AS

@@ -63,6 +63,7 @@ def extract_game(game: dict) -> dict:
         "game_pk":          game["gamePk"],
         "game_date":        game["officialDate"],
         "game_datetime_utc": game_datetime_utc,
+        "game_number":      game.get("gameNumber") or 1,
         "home_team_abbr":   home_abbr,
         "away_team_abbr":   away_abbr,
         "home_pitcher_name":   home_pitcher.get("fullName") or None,
