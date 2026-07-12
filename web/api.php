@@ -203,7 +203,17 @@ if ($type === 'matchups') {
                 ON  opp.opponent_team_abbr = p.editorial_team_abbr
                 AND opp.matchup_text LIKE CONCAT('%', ?, '%')
                 AND opp.projection_text IS NOT NULL
-                AND (bmatch.opp_pitcher_name IS NULL OR opp.pitcher_name = bmatch.opp_pitcher_name)
+                -- Only require the pitcher name to line up when bmatch itself
+                -- represents a doubleheader (matchup_text carries a Gm. N marker);
+                -- otherwise let ESPN's projection win even if it names a
+                -- different probable pitcher than MLB's schedule feed, since
+                -- ESPN is the projection source of record for this page and
+                -- the two sources can legitimately disagree/lag each other.
+                AND (
+                    bmatch.matchup_text NOT LIKE '%(Gm.%'
+                    OR bmatch.opp_pitcher_name IS NULL
+                    OR opp.pitcher_name = bmatch.opp_pitcher_name
+                )
             LEFT JOIN player opp_p ON opp_p.player_id = opp.player_id
             LEFT JOIN player sched_p ON sched_p.player_id = bmatch.opp_pitcher_player_id
             LEFT JOIN current_pitcher_stats cps
