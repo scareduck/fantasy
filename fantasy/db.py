@@ -633,6 +633,7 @@ def upsert_fa_il_analysis(
     conn: mariadb.Connection,
     *,
     player_id: int,
+    position_type: str,
     injury_description: str | None,
     injury_severity: int | None,
     return_date: str | None,
@@ -646,11 +647,11 @@ def upsert_fa_il_analysis(
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO fa_il_pitcher_analysis (
-            player_id, injury_description, injury_severity,
+        INSERT INTO fa_il_analysis (
+            player_id, position_type, injury_description, injury_severity,
             return_date, return_date_is_estimate, is_high_quality,
             quality_notes, return_notes, news_sources_json, analyzed_at_utc
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             injury_description      = VALUES(injury_description),
             injury_severity         = VALUES(injury_severity),
@@ -663,7 +664,7 @@ def upsert_fa_il_analysis(
             analyzed_at_utc         = VALUES(analyzed_at_utc)
         """,
         (
-            player_id, injury_description, injury_severity,
+            player_id, position_type, injury_description, injury_severity,
             return_date, int(return_date_is_estimate), int(is_high_quality),
             quality_notes, return_notes, news_sources_json,
             analyzed_at_utc,

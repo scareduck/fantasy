@@ -9,7 +9,7 @@ from fantasy.notify import send_alert
 from fantasy.yahoo_auth import InteractiveAuthRequired
 from scripts.batter_sync import main as batter_main
 from scripts.espn_forecaster_sync import main as espn_main
-from scripts.fa_il_pitcher_report import main as il_pitchers_main
+from scripts.fa_il_report import main_batters as il_batters_main, main_pitchers as il_pitchers_main
 from scripts.mlb_schedule_sync import main as mlb_schedule_main
 from scripts.pitcher_game_log_sync import main as game_log_main
 from scripts.pitcher_report import main as report_main
@@ -80,6 +80,12 @@ def main() -> int:
             rc = il_pitchers_main(["--rotowire"])
             if rc:
                 print(f"IL pitcher analysis failed (exit {rc}).", file=sys.stderr)
+                return rc
+
+            print("\n=== Step 7b: FA IL position player analysis ===")
+            rc = il_batters_main(["--rotowire"])
+            if rc:
+                print(f"IL position player analysis failed (exit {rc}).", file=sys.stderr)
                 return rc
 
             if run_args.send_report:

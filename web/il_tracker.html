@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>FA IL Pitchers</title>
+<title>FA IL Tracker</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -28,10 +28,31 @@ header span { font-size: 12px; opacity: 0.8; }
 header a { color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
 header a:hover { text-decoration: underline; }
 
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 16px 0;
+  background: #e8eaed;
+}
+.tab {
+  padding: 7px 20px;
+  border: 1px solid #bdc1c6;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  background: #dadce0;
+  font-weight: 500;
+  color: #5f6368;
+  transition: background 0.1s;
+}
+.tab:hover  { background: #ececec; }
+.tab.active { background: #fff; color: #1a73e8; border-color: #dadce0; }
+
 .panel {
   background: #fff;
   border: 1px solid #dadce0;
-  margin: 10px 0 0;
+  border-top: none;
+  margin: 0;
 }
 
 .filters {
@@ -181,11 +202,16 @@ tbody td a:hover { text-decoration: underline; }
 <body>
 
 <header>
-  <h1>FA IL Pitcher Tracker</h1>
+  <h1>FA IL Tracker</h1>
   <div class="spacer"></div>
   <span id="as-of"></span>
   <a href="index.html">&#8592; Home</a>
 </header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="pitchers">Pitchers</div>
+  <div class="tab"        data-tab="batters">Position Players</div>
+</div>
 
 <div id="inj-popup-overlay"></div>
 <div id="inj-popup">
@@ -210,8 +236,8 @@ tbody td a:hover { text-decoration: underline; }
     <div class="fg"><label>Return within</label>
       <input type="number" id="f-days" value="" min="1" step="7" placeholder="days" style="width:60px">
     </div>
-    <div class="filter-sep">|</div>
-    <div class="fg">
+    <div class="filter-sep" id="role-sep">|</div>
+    <div class="fg" id="role-filter-group">
       <label>Role</label>
       <label class="opt"><input type="radio" name="f-role" value="" checked> All</label>
       <label class="opt"><input type="radio" name="f-role" value="SP"> SP</label>
@@ -248,7 +274,23 @@ tbody td a:hover { text-decoration: underline; }
 <script>
 'use strict';
 
-let rows   = null;
+// cache[tab] = fetched rows array, once loaded
+const cache = { pitchers: null, batters: null };
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setCookie(name, value, days) {
+  const exp = new Date();
+  exp.setDate(exp.getDate() + (days || 365));
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + exp.toUTCString() + '; path=/';
+}
+
+let activeTab = 'pitchers';
+const savedTab = getCookie('fantasy_tab');
+if (savedTab === 'pitchers' || savedTab === 'batters') activeTab = savedTab;
+
 let sortCol = null;
 let sortDir = 1;
 let openPopup = null;
@@ -301,6 +343,8 @@ function statsLink(key, name) {
   return yahoo + bref;
 }
 function fmtOwn(v) { return v != null ? (+v).toFixed(1) + '%' : ''; }
+function fmtNum3(v) { return v != null ? (+v).toFixed(3) : ''; }
+function fmtInt(v) { return v != null ? v : ''; }
 
 function availClass(v) {
   if (v === 'FA') return 'av-fa';
@@ -325,56 +369,57 @@ function fmtReturn(v, r) {
     : `<span class="ret-known">${v}</span>`;
 }
 
-
-
 function fmtQuality(v, r) {
   if (!v) return '';
   const tip = (r.quality_notes || '').replace(/"/g, '&quot;');
   return `<span class="quality-star" title="${tip}">&#9733;</span>`;
 }
 
-function fmtSources(v, r) {
+function fmtInjuryBtn(v, r) {
   if (!v) return '';
-  let sources;
-  try { sources = JSON.parse(v); } catch (e) { return ''; }
-  if (!sources.length) return '';
-  const uid = 'src-' + r._idx;
-  const count = sources.length;
-  const links = sources.map(s => {
-    const href = s.url ? `href="${s.url}" target="_blank" rel="noopener"` : '';
-    return `<a ${href}>${s.title || 'Source'}</a>`;
-  }).join('');
-  return `<span class="src-wrap">
-    <button class="src-btn" data-uid="${uid}">${count} source${count > 1 ? 's' : ''}</button>
-    <div class="src-popup" id="${uid}">${links}</div>
-  </span>`;
+  const label = v.length > 32 ? v.slice(0, 30) + '…' : v;
+  const name  = (r.name || '').replace(/"/g, '&quot;');
+  const body  = v.replace(/"/g, '&quot;');
+  return `<button class="inj-btn" data-name="${name}" data-body="${body}">${label}</button>`;
 }
 
-const COLS = [
-  { label: 'Name',    key: 'name',       cls: 'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
-  { label: '',        key: 'player_key', noSort: true,      fmt: (v, r) => statsLink(v, r.name) },
-  { label: 'Team',   key: 'team' },
-  { label: 'Pos',    key: 'pos', cls: 'pos-cell' },
-  { label: 'IL',     key: 'il_status',  fmt: v => `<span class="st-il">${v || ''}</span>` },
-  { label: 'Avail',  key: 'avail',      fmtClass: availClass },
-  { label: '%Own',   key: 'pct_own',    cls: 'num', fmt: fmtOwn },
-  { label: 'IP',     key: 'ip',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
-  { label: 'ERA',    key: 'era',        cls: 'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
-  { label: 'WHIP',   key: 'whip',       cls: 'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
-  { label: 'K/9',    key: 'k9',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
-  { label: 'Sev',    key: 'injury_severity', cls: 'num', fmtClass: sevClass, fmt: fmtSev },
-  { label: 'Return', key: 'return_date', fmt: fmtReturn },
-  { label: '★', key: 'is_high_quality', fmt: fmtQuality },
-  { label: 'Injury', key: 'injury_description',
-    fmt: (v, r) => {
-      if (!v) return '';
-      const label = v.length > 32 ? v.slice(0, 30) + '…' : v;
-      const name  = (r.name || '').replace(/"/g, '&quot;');
-      const body  = v.replace(/"/g, '&quot;');
-      return `<button class="inj-btn" data-name="${name}" data-body="${body}">${label}</button>`;
-    }
-  },
-];
+const COLS = {
+  pitchers: [
+    { label: 'Name',    key: 'name',       cls: 'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+    { label: '',        key: 'player_key', noSort: true,      fmt: (v, r) => statsLink(v, r.name) },
+    { label: 'Team',   key: 'team' },
+    { label: 'Pos',    key: 'pos', cls: 'pos-cell' },
+    { label: 'IL',     key: 'il_status',  fmt: v => `<span class="st-il">${v || ''}</span>` },
+    { label: 'Avail',  key: 'avail',      fmtClass: availClass },
+    { label: '%Own',   key: 'pct_own',    cls: 'num', fmt: fmtOwn },
+    { label: 'IP',     key: 'ip',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+    { label: 'ERA',    key: 'era',        cls: 'num', fmt: v => v != null ? (+v).toFixed(2) : '' },
+    { label: 'WHIP',   key: 'whip',       cls: 'num', fmt: v => v != null ? (+v).toFixed(3) : '' },
+    { label: 'K/9',    key: 'k9',         cls: 'num', fmt: v => v != null ? (+v).toFixed(1) : '' },
+    { label: 'Sev',    key: 'injury_severity', cls: 'num', fmtClass: sevClass, fmt: fmtSev },
+    { label: 'Return', key: 'return_date', fmt: fmtReturn },
+    { label: '★', key: 'is_high_quality', fmt: fmtQuality },
+    { label: 'Injury', key: 'injury_description', fmt: fmtInjuryBtn },
+  ],
+  batters: [
+    { label: 'Name',    key: 'name',       cls: 'name-cell', fmt: (v, r) => addLink(v, r.player_key) },
+    { label: '',        key: 'player_key', noSort: true,      fmt: (v, r) => statsLink(v, r.name) },
+    { label: 'Team',   key: 'team' },
+    { label: 'Pos',    key: 'pos', cls: 'pos-cell' },
+    { label: 'IL',     key: 'il_status',  fmt: v => `<span class="st-il">${v || ''}</span>` },
+    { label: 'Avail',  key: 'avail',      fmtClass: availClass },
+    { label: '%Own',   key: 'pct_own',    cls: 'num', fmt: fmtOwn },
+    { label: 'AVG',    key: 'avg',        cls: 'num', fmt: fmtNum3 },
+    { label: 'HR',     key: 'hr',         cls: 'num', fmt: fmtInt },
+    { label: 'RBI',    key: 'rbi',        cls: 'num', fmt: fmtInt },
+    { label: 'SB',     key: 'sb',         cls: 'num', fmt: fmtInt },
+    { label: 'OBP',    key: 'obp',        cls: 'num', fmt: fmtNum3 },
+    { label: 'Sev',    key: 'injury_severity', cls: 'num', fmtClass: sevClass, fmt: fmtSev },
+    { label: 'Return', key: 'return_date', fmt: fmtReturn },
+    { label: '★', key: 'is_high_quality', fmt: fmtQuality },
+    { label: 'Injury', key: 'injury_description', fmt: fmtInjuryBtn },
+  ],
+};
 
 function radioVal(name) {
   const el = document.querySelector(`input[name="${name}"]:checked`);
@@ -389,7 +434,7 @@ function getFilters() {
     search:  gs('f-search'),
     sev:     g('f-sev'),
     days:    g('f-days'),
-    role:    radioVal('f-role'),
+    role:    activeTab === 'pitchers' ? radioVal('f-role') : '',
     avail:   radioVal('f-avail'),
     quality: ck('f-quality'),
   };
@@ -424,12 +469,16 @@ function numVal(v) {
 }
 
 function render() {
+  const rows = cache[activeTab];
   if (!rows) return;
+  const cols = COLS[activeTab];
+  const noun = activeTab === 'pitchers' ? 'pitchers' : 'position players';
+
   const f    = getFilters();
   let   data = rows.filter(r => passes(r, f));
 
-  if (sortCol !== null && sortCol < COLS.length) {
-    const col  = COLS[sortCol];
+  if (sortCol !== null && sortCol < cols.length) {
+    const col  = cols[sortCol];
     const key  = col.key;
     const valFn = col.sortVal ? col.sortVal : numVal;
     data.sort((a, b) => {
@@ -442,7 +491,7 @@ function render() {
   }
 
   const thead = document.getElementById('thead');
-  thead.innerHTML = '<tr>' + COLS.map((c, i) => {
+  thead.innerHTML = '<tr>' + cols.map((c, i) => {
     const sc = sortCol === i ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
     const cur = c.noSort ? 'style="cursor:default"' : '';
     return `<th class="${sc}" data-i="${i}" ${cur}>${c.label}</th>`;
@@ -450,7 +499,7 @@ function render() {
   thead.querySelectorAll('th').forEach(th => {
     th.addEventListener('click', () => {
       const i = +th.dataset.i;
-      if (COLS[i].noSort) return;
+      if (cols[i].noSort) return;
       if (sortCol === i) sortDir *= -1;
       else { sortCol = i; sortDir = 1; }
       render();
@@ -459,14 +508,14 @@ function render() {
 
   const tbody = document.getElementById('tbody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="99" class="msg">No pitchers match the current filters.</td></tr>';
-    document.getElementById('count-lbl').textContent = '0 pitchers';
+    tbody.innerHTML = `<tr><td colspan="99" class="msg">No ${noun} match the current filters.</td></tr>`;
+    document.getElementById('count-lbl').textContent = `0 ${noun}`;
     return;
   }
 
   tbody.innerHTML = data.map((row, idx) => {
     row._idx = idx;
-    return '<tr>' + COLS.map(c => {
+    return '<tr>' + cols.map(c => {
       const raw  = row[c.key];
       const val  = c.fmt ? c.fmt(raw, row) : (raw == null ? '' : raw);
       const tdcls = [c.cls || '', c.fmtClass ? c.fmtClass(raw) : ''].filter(Boolean).join(' ');
@@ -475,7 +524,7 @@ function render() {
   }).join('');
 
   document.getElementById('count-lbl').textContent =
-    `${data.length} of ${rows.length} pitchers`;
+    `${data.length} of ${rows.length} ${noun}`;
 
   // wire up injury detail popups
   tbody.querySelectorAll('.inj-btn').forEach(btn => {
@@ -483,17 +532,25 @@ function render() {
   });
 }
 
-async function load() {
+async function load(tab) {
+  if (cache[tab]) { if (activeTab === tab) render(); return; }
+
+  if (activeTab === tab) {
+    document.getElementById('tbody').innerHTML =
+      '<tr><td class="msg" colspan="99">Loading&#8230;</td></tr>';
+  }
   try {
-    const resp = await fetch('api.php?type=il_pitchers');
+    const resp = await fetch(`api.php?type=il_${tab}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
     if (json.error) throw new Error(json.error);
-    rows = json;
-    render();
+    cache[tab] = json;
+    if (activeTab === tab) render();
   } catch (e) {
-    document.getElementById('tbody').innerHTML =
-      `<tr><td colspan="99" class="msg err">Error: ${e.message}</td></tr>`;
+    if (activeTab === tab) {
+      document.getElementById('tbody').innerHTML =
+        `<tr><td colspan="99" class="msg err">Error: ${e.message}</td></tr>`;
+    }
   }
 }
 
@@ -515,15 +572,41 @@ document.getElementById('reset-btn').addEventListener('click', () => {
   render();
 });
 
+function applyTabVisibility() {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === activeTab);
+  });
+  const showRole = activeTab === 'pitchers';
+  document.getElementById('role-filter-group').style.display = showRole ? '' : 'none';
+  document.getElementById('role-sep').style.display = showRole ? '' : 'none';
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    if (t.dataset.tab === activeTab) return;
+    activeTab = t.dataset.tab;
+    sortCol = null;
+    sortDir = 1;
+    applyTabVisibility();
+    setCookie('fantasy_tab', activeTab, 1);
+    load(activeTab);
+  });
+});
+
+applyTabVisibility();
+
 fetch('api.php?type=meta')
   .then(r => r.json())
   .then(m => {
-    if (m.pitcher_sync)
-      document.getElementById('as-of').textContent = `P sync: ${m.pitcher_sync}`;
+    const parts = [];
+    if (m.pitcher_sync) parts.push(`P: ${m.pitcher_sync}`);
+    if (m.batter_sync)  parts.push(`B: ${m.batter_sync}`);
+    if (parts.length) document.getElementById('as-of').textContent = parts.join(' · ');
   })
   .catch(() => {});
 
-load();
+load('pitchers');
+load('batters');
 </script>
 </body>
 </html>
