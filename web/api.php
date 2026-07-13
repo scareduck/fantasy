@@ -401,7 +401,7 @@ if ($type === 'il_pitchers') {
         FROM current_availability ca
         JOIN player p ON p.player_id = ca.player_id
         LEFT JOIN current_pitcher_stats cps ON cps.player_id = ca.player_id
-        LEFT JOIN fa_il_pitcher_analysis  a  ON a.player_id  = ca.player_id
+        LEFT JOIN fa_il_analysis  a  ON a.player_id  = ca.player_id
         WHERE p.yahoo_status LIKE 'IL%'
           AND ca.availability_status IN ('FA', 'W')
         ORDER BY a.injury_severity DESC, a.return_date ASC, p.full_name ASC
@@ -415,6 +415,60 @@ if ($type === 'il_pitchers') {
         $row['era']                   = $row['era']                   !== null ? (float)$row['era']  : null;
         $row['whip']                  = $row['whip']                  !== null ? (float)$row['whip'] : null;
         $row['k9']                    = $row['k9']                    !== null ? (float)$row['k9']   : null;
+        $row['pct_own']               = $row['pct_own']               !== null ? (float)$row['pct_own'] : null;
+        $row['injury_severity']       = $row['injury_severity']       !== null ? (int)$row['injury_severity'] : null;
+        $row['return_date_is_estimate'] = (bool)$row['return_date_is_estimate'];
+        $row['is_high_quality']       = (bool)$row['is_high_quality'];
+        $rows[] = $row;
+    }
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+if ($type === 'il_batters') {
+    $sql = "
+        SELECT
+            p.full_name                                      AS name,
+            p.yahoo_player_key                               AS player_key,
+            p.editorial_team_abbr                            AS team,
+            p.display_position                               AS pos,
+            p.yahoo_status                                   AS il_status,
+            ca.availability_status                           AS avail,
+            ca.percent_owned                                 AS pct_own,
+            cbs.ab,
+            cbs.hr,
+            cbs.rbi,
+            cbs.sb,
+            ROUND(cbs.h / NULLIF(cbs.ab, 0), 3)              AS avg,
+            CAST(cbs.obp AS DECIMAL(4,3))                    AS obp,
+            a.injury_description,
+            a.injury_severity,
+            a.return_date,
+            a.return_date_is_estimate,
+            a.is_high_quality,
+            a.quality_notes,
+            a.return_notes,
+            a.news_sources_json,
+            a.analyzed_at_utc
+        FROM current_availability_batter ca
+        JOIN player p ON p.player_id = ca.player_id
+        LEFT JOIN current_batter_stats cbs ON cbs.player_id = ca.player_id
+        LEFT JOIN fa_il_analysis  a  ON a.player_id  = ca.player_id
+        WHERE p.yahoo_status LIKE 'IL%'
+          AND ca.availability_status IN ('FA', 'W')
+        ORDER BY a.injury_severity DESC, a.return_date ASC, p.full_name ASC
+    ";
+    $result = $conn->query($sql);
+    if (!$result) { http_response_code(500); echo json_encode(['error' => $conn->error]); exit; }
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['ab']                    = $row['ab']                    !== null ? (int)$row['ab']    : null;
+        $row['hr']                    = $row['hr']                    !== null ? (int)$row['hr']    : null;
+        $row['rbi']                   = $row['rbi']                   !== null ? (int)$row['rbi']   : null;
+        $row['sb']                    = $row['sb']                    !== null ? (int)$row['sb']    : null;
+        $row['avg']                   = $row['avg']                   !== null ? (float)$row['avg'] : null;
+        $row['obp']                   = $row['obp']                   !== null ? (float)$row['obp'] : null;
         $row['pct_own']               = $row['pct_own']               !== null ? (float)$row['pct_own'] : null;
         $row['injury_severity']       = $row['injury_severity']       !== null ? (int)$row['injury_severity'] : null;
         $row['return_date_is_estimate'] = (bool)$row['return_date_is_estimate'];
@@ -460,8 +514,8 @@ if ($type === 'pitchers') {
             p.editorial_team_abbr                    AS team,
             p.display_position                       AS pos,
             COALESCE(p.yahoo_status, '')              AS status,
-            pas.availability_status                  AS avail,
-            pas.percent_owned                        AS pct_own,
+            ca.availability_status                   AS avail,
+            ca.percent_owned                         AS pct_own,
             bss.ab,
             bss.obp,
             bss.r,
@@ -469,16 +523,11 @@ if ($type === 'pitchers') {
             bss.rbi,
             bss.sb,
             bss.bb
-        FROM player_availability_snapshot pas
-        JOIN player p   ON p.player_id  = pas.player_id
+        FROM current_availability_batter ca
+        JOIN player p   ON p.player_id  = ca.player_id
         JOIN batter_season_stats bss
-             ON  bss.player_id   = pas.player_id
-             AND bss.sync_run_id = pas.sync_run_id
-        WHERE pas.sync_run_id = (
-                SELECT MAX(sr.sync_run_id)
-                FROM   sync_run sr
-                WHERE  sr.requested_position = 'B'
-              )
+             ON  bss.player_id   = ca.player_id
+             AND bss.sync_run_id = ca.sync_run_id
         ORDER BY bss.obp DESC, bss.ab DESC
     ";
 }

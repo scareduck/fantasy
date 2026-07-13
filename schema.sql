@@ -413,6 +413,28 @@ WHERE pas.sync_run_id = (
     WHERE sr.requested_position = 'P'
 );
 
+-- Current player availability: the most recent batter (B) availability snapshot.
+CREATE OR REPLACE VIEW current_availability_batter AS
+SELECT
+    pas.snapshot_id,
+    pas.sync_run_id,
+    pas.league_id,
+    pas.player_id,
+    pas.captured_at_utc,
+    pas.availability_status,
+    pas.source_page_start,
+    pas.source_page_count,
+    pas.percent_owned,
+    pas.raw_player_xml,
+    pas.created_at_utc
+FROM player_availability_snapshot pas
+WHERE pas.sync_run_id = (
+    SELECT MAX(pas2.sync_run_id)
+    FROM player_availability_snapshot pas2
+    JOIN sync_run sr ON sr.sync_run_id = pas2.sync_run_id
+    WHERE sr.requested_position = 'B'
+);
+
 -- MLB game schedule with probable starters (one row per game).
 CREATE TABLE IF NOT EXISTS mlb_schedule (
     mlb_schedule_id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -478,9 +500,10 @@ CREATE TABLE IF NOT EXISTS player_regular (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- FA IL pitcher AI analysis: one row per player, upserted on each analysis run.
-CREATE TABLE IF NOT EXISTS fa_il_pitcher_analysis (
-    fa_il_pitcher_analysis_id BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS fa_il_analysis (
+    fa_il_analysis_id       BIGINT UNSIGNED    NOT NULL AUTO_INCREMENT PRIMARY KEY,
     player_id               BIGINT UNSIGNED    NOT NULL UNIQUE,
+    position_type           VARCHAR(8)         NOT NULL COMMENT 'P or B, mirrors player.position_type',
     injury_description      TEXT,
     injury_severity         TINYINT,
     return_date             DATE,

@@ -5,7 +5,8 @@ Preferred: extracts cookies directly from your Firefox profile (fastest, no
 browser window needed). Falls back to opening a headed Playwright window if
 Firefox cookies are not found.
 
-Saves cookies to ~/.rotowire_cookies.json for use by fantasy-il-pitchers.
+Saves cookies to ~/.rotowire_cookies.json for use by fantasy-il-pitchers and
+fantasy-il-batters.
 """
 from __future__ import annotations
 
