@@ -201,8 +201,17 @@ if ($type === 'matchups') {
                 AND bmatch.game_date = ?
             LEFT JOIN current_espn_forecast opp
                 ON  opp.opponent_team_abbr = p.editorial_team_abbr
-                AND opp.matchup_text LIKE CONCAT('%', ?, '%')
                 AND opp.projection_text IS NOT NULL
+                AND (
+                    -- Normal case: ESPN's own date label lines up with today's game.
+                    opp.matchup_text LIKE CONCAT('%', ?, '%')
+                    -- Fallback: the schedule already has a confirmed starter for
+                    -- today (from MLB's feed) but ESPN's date-tagged grid entry
+                    -- is stale -- e.g. a postponed game gets replayed as part of
+                    -- a same-day doubleheader and ESPN never re-dates that start.
+                    -- Trust the pitcher-name match over the (now-wrong) date.
+                    OR (bmatch.opp_pitcher_name IS NOT NULL AND opp.pitcher_name = bmatch.opp_pitcher_name)
+                )
                 -- Only require the pitcher name to line up when bmatch itself
                 -- represents a doubleheader (matchup_text carries a Gm. N marker);
                 -- otherwise let ESPN's projection win even if it names a
