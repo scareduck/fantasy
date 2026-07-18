@@ -221,6 +221,7 @@ tbody td a:hover { text-decoration: underline; }
       <label class="opt"><input type="radio" name="p-role" value=""   checked> All</label>
       <label class="opt"><input type="radio" name="p-role" value="SP"> SP</label>
       <label class="opt"><input type="radio" name="p-role" value="RP"> RP</label>
+      <label class="opt"><input type="checkbox" id="p-role-excl"> Exclusive</label>
     </div>
     <div class="filter-sep">|</div>
     <div class="fg">
@@ -431,6 +432,10 @@ function resetFilters(tab) {
                    (el.name === 'p-role' && el.value === '');
       return;
     }
+    if (el.type === 'checkbox') {
+      el.checked = false;
+      return;
+    }
     const def = DEFAULTS[tab][el.id];
     el.value = def !== undefined ? def : '';
   });
@@ -474,6 +479,7 @@ function getFilters(tab) {
     w:      g('p-w'),
     own:    g('p-own'),
     role:   radioVal('p-role'),
+    roleExcl: document.getElementById('p-role-excl').checked,
     avail:  radioVal('p-avail'),
     ilMode: il('p-il'),
     search: gs('p-search'),
@@ -516,6 +522,7 @@ function passes(row, tab, f) {
     if (f.role) {
       const playerPos = (row.pos || '').split(',').map(p => p.trim());
       if (!playerPos.includes(f.role)) return false;
+      if (f.roleExcl && playerPos.length !== 1) return false;
     }
   }
   return true;
