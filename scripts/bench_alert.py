@@ -96,8 +96,9 @@ def _batter_row(row: tuple, alert_type: str) -> dict:
         "norm_name":  normalize_name(
             f"{row[3] or ''} {row[4] or ''}".strip() or row[2]
         ),
-        "mlb_team":   row[5] or "",
-        "alert_type": alert_type,
+        "mlb_team":     row[5] or "",
+        "yahoo_status": row[6],
+        "alert_type":   alert_type,
     }
 
 
@@ -119,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
         cur.execute(
             f"""
             SELECT cr.team_key, p.player_id, p.full_name,
-                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr
+                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr,
+                   p.yahoo_status
             FROM current_roster cr
             JOIN player p ON p.player_id = cr.player_id
             WHERE cr.team_key IN ({placeholders})
@@ -136,7 +138,8 @@ def main(argv: list[str] | None = None) -> int:
         cur.execute(
             f"""
             SELECT cr.team_key, p.player_id, p.full_name,
-                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr
+                   p.ascii_first_name, p.ascii_last_name, p.editorial_team_abbr,
+                   p.yahoo_status
             FROM current_roster cr
             JOIN player p ON p.player_id = cr.player_id
             JOIN player_regular pr ON pr.player_id = cr.player_id
@@ -234,9 +237,10 @@ def main(argv: list[str] | None = None) -> int:
                 player_id = batter["player_id"]
                 if already_alerted(cur, today, player_id, "benched"):
                     continue
+                status_tag = f" [{batter['yahoo_status']}]" if batter["yahoo_status"] else ""
                 line = (
                     f"{batter['full_name']} ({batter['mlb_team']}) "
-                    f"— not in lineup ({away_abbr} @ {home_abbr})"
+                    f"— not in lineup ({away_abbr} @ {home_abbr}){status_tag}"
                 )
                 print(f"  BENCH: {line}")
                 alerts_by_email.setdefault(team_to_email[batter["team_key"]], []).append(
