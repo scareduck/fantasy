@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Roster Editor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  background: #e8eaed;
+  color: #202124;
+  min-height: 100vh;
+}
+
+header {
+  background: #1a73e8;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+header h1 { font-size: 17px; font-weight: 600; }
+header a  { color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+header a:hover { text-decoration: underline; }
+header .spacer { flex: 1; }
+
+select#team-select {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  cursor: pointer;
+}
+select#team-select option { background: #1558b0; color: #fff; }
+
+.notice {
+  margin: 12px 16px 0;
+  padding: 8px 12px;
+  background: #fef7e0;
+  border: 1px solid #f9d67a;
+  border-radius: 6px;
+  color: #7d5600;
+  font-size: 12px;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  margin: 16px;
+}
+
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: #f1f3f4;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  white-space: nowrap;
+  border-bottom: 2px solid #dadce0;
+  color: #5f6368;
+}
+tbody td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f1f1f1;
+  white-space: nowrap;
+}
+tbody tr:hover td { background: #f8f9ff; }
+tbody tr.pending-remove td { opacity: 0.4; text-decoration: line-through; }
+tbody tr.pending-add td { background: #e6f4ea; }
+tbody tr:last-child td { border-bottom: none; }
+
+select.pos-select {
+  padding: 3px 6px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff;
+}
+
+.status-il  { background: #fce8e6; color: #c5221f; }
+.status-dtd { background: #fef7e0; color: #7d5600; }
+.status-na  { background: #f1f3f4; color: #5f6368; }
+.badge {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+}
+
+.btn {
+  padding: 4px 10px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5f6368;
+}
+.btn:hover { background: #f8f9ff; border-color: #1a73e8; color: #1a73e8; }
+.btn-remove { color: #c5221f; border-color: #f3c9c6; }
+.btn-remove:hover { background: #fce8e6; border-color: #c5221f; }
+.btn-primary { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+.btn-primary:hover { background: #1558b0; color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid #ebebeb;
+  flex-wrap: wrap;
+}
+.toolbar .spacer { flex: 1; }
+
+.search-wrap { position: relative; flex: 1; min-width: 220px; max-width: 420px; }
+#search-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+#search-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0; right: 0;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 5;
+  display: none;
+}
+#search-results.open { display: block; }
+.result-row {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.result-row:hover { background: #f8f9ff; }
+.result-name { font-weight: 600; }
+.result-meta { color: #5f6368; font-size: 11px; white-space: nowrap; }
+
+#save-status {
+  font-size: 12px;
+  color: #5f6368;
+}
+#save-status.ok  { color: #137333; font-weight: 600; }
+#save-status.err { color: #c5221f; font-weight: 600; }
+
+.msg { padding: 40px; text-align: center; color: #5f6368; font-size: 14px; }
+.msg.err { color: #c5221f; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Roster Editor</h1>
+  <select id="team-select"></select>
+  <div class="spacer"></div>
+  <a href="lineup.html">Lineup Helper</a>
+  <a href="index.html">&#8592; Home</a>
+</header>
+
+<div class="notice">
+  Yahoo's Fantasy API has been returning 403 errors since 2026-07-28, so automatic
+  roster sync is down. Edits made here are stored locally as the new "current"
+  roster until Yahoo syncing resumes.
+</div>
+
+<div class="panel">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>MLB</th>
+          <th>Pos</th>
+          <th>Status</th>
+          <th>Slot</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"><tr><td class="msg" colspan="6">Loading&#8230;</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <input id="search-input" type="text" placeholder="Add a player by name&#8230;" autocomplete="off">
+      <div id="search-results"></div>
+    </div>
+    <div class="spacer"></div>
+    <span id="save-status"></span>
+    <button id="revert-btn" class="btn">Revert</button>
+    <button id="save-btn" class="btn btn-primary">Save Roster</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const OUR_TEAMS = ["469.l.73362.t.8", "469.l.73362.t.10"];
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setCookie(name, value, days) {
+  const exp = new Date();
+  exp.setDate(exp.getDate() + (days || 365));
+  document.cookie = name + "=" + encodeURIComponent(value) + "; expires=" + exp.toUTCString() + "; path=/";
+}
+
+let activeTeam = "469.l.73362.t.8";
+let positions  = ["C","1B","2B","3B","SS","OF","Util","SP","RP","P","BN","IL","IL+","NA"];
+let roster     = [];   // [{player_id, full_name, mlb_team, display_position, position_type, selected_position, yahoo_status, _new}]
+let dirty      = false;
+
+const tbody       = document.getElementById("tbody");
+const searchInput = document.getElementById("search-input");
+const searchBox   = document.getElementById("search-results");
+const saveStatus  = document.getElementById("save-status");
+const saveBtn     = document.getElementById("save-btn");
+const revertBtn   = document.getElementById("revert-btn");
+
+function statusBadge(s) {
+  if (!s) return "";
+  const cls = s.startsWith("IL") ? "status-il" : s === "DTD" ? "status-dtd" : "status-na";
+  return `<span class="badge ${cls}">${s}</span>`;
+}
+
+function markDirty() {
+  dirty = true;
+  saveStatus.textContent = "Unsaved changes";
+  saveStatus.className = "";
+}
+
+function render() {
+  if (!roster.length) {
+    tbody.innerHTML = '<tr><td class="msg" colspan="6">No players on this roster. Use the search box below to add some.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = roster.map(function(p, i) {
+    const posOpts = positions.map(function(pos) {
+      return `<option value="${pos}"${pos === p.selected_position ? " selected" : ""}>${pos}</option>`;
+    }).join("");
+    return `<tr data-idx="${i}"${p._new ? ' class="pending-add"' : ""}>
+      <td>${p.full_name}</td>
+      <td>${p.mlb_team || ""}</td>
+      <td>${p.display_position || ""}</td>
+      <td>${statusBadge(p.yahoo_status)}</td>
+      <td><select class="pos-select" data-idx="${i}">${posOpts}</select></td>
+      <td><button class="btn btn-remove" data-idx="${i}">Drop</button></td>
+    </tr>`;
+  }).join("");
+}
+
+async function loadRoster(team) {
+  tbody.innerHTML = '<tr><td class="msg" colspan="6">Loading&#8230;</td></tr>';
+  saveStatus.textContent = "";
+  saveStatus.className = "";
+  dirty = false;
+  try {
+    const resp = await fetch("api.php?type=roster_edit&team=" + encodeURIComponent(team));
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    positions = data.positions || positions;
+    roster = data.players.map(function(p) { return Object.assign({}, p, { _new: false }); });
+    render();
+  } catch (e) {
+    tbody.innerHTML = '<tr><td class="msg err" colspan="6">Error: ' + e.message + '</td></tr>';
+  }
+}
+
+tbody.addEventListener("change", function(e) {
+  if (!e.target.classList.contains("pos-select")) return;
+  const idx = parseInt(e.target.dataset.idx, 10);
+  roster[idx].selected_position = e.target.value;
+  markDirty();
+});
+
+tbody.addEventListener("click", function(e) {
+  const btn = e.target.closest(".btn-remove");
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  roster.splice(idx, 1);
+  markDirty();
+  render();
+});
+
+let searchTimer = null;
+searchInput.addEventListener("input", function() {
+  clearTimeout(searchTimer);
+  const q = searchInput.value.trim();
+  if (q.length < 2) { searchBox.classList.remove("open"); searchBox.innerHTML = ""; return; }
+  searchTimer = setTimeout(function() { runSearch(q); }, 200);
+});
+
+document.addEventListener("click", function(e) {
+  if (!e.target.closest(".search-wrap")) searchBox.classList.remove("open");
+});
+
+async function runSearch(q) {
+  try {
+    const resp = await fetch("api.php?type=roster_search&q=" + encodeURIComponent(q));
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const rows = await resp.json();
+    const onRoster = new Set(roster.map(function(p) { return p.player_id; }));
+    if (!rows.length) {
+      searchBox.innerHTML = '<div class="result-row"><span class="result-meta">No matches</span></div>';
+      searchBox.classList.add("open");
+      return;
+    }
+    searchBox.innerHTML = rows.map(function(r) {
+      let meta = r.mlb_team || "";
+      if (r.display_position) meta += (meta ? " · " : "") + r.display_position;
+      if (r.rostered_team_key === activeTeam) meta += " · already on this roster";
+      else if (r.rostered_team_key) meta += " · on " + r.rostered_team_name;
+      else if (r.avail_status) meta += " · " + r.avail_status;
+      const already = onRoster.has(r.player_id);
+      return `<div class="result-row" data-id="${r.player_id}" data-name="${r.full_name.replace(/"/g, '&quot;')}"
+                   data-team="${r.mlb_team || ''}" data-pos="${r.display_position || ''}"
+                   data-ptype="${r.position_type || ''}" data-status="${r.yahoo_status || ''}"
+                   style="${already ? 'opacity:0.5;pointer-events:none;' : ''}">
+                <span class="result-name">${r.full_name}</span>
+                <span class="result-meta">${meta}${already ? " (added)" : ""}</span>
+              </div>`;
+    }).join("");
+    searchBox.classList.add("open");
+  } catch (e) {
+    searchBox.innerHTML = '<div class="result-row"><span class="result-meta">Error: ' + e.message + '</span></div>';
+    searchBox.classList.add("open");
+  }
+}
+
+searchBox.addEventListener("click", function(e) {
+  const row = e.target.closest(".result-row[data-id]");
+  if (!row) return;
+  roster.push({
+    player_id: parseInt(row.dataset.id, 10),
+    full_name: row.dataset.name,
+    mlb_team: row.dataset.team,
+    display_position: row.dataset.pos,
+    position_type: row.dataset.ptype,
+    selected_position: row.dataset.ptype === "P" ? "BN" : "BN",
+    yahoo_status: row.dataset.status,
+    _new: true,
+  });
+  markDirty();
+  render();
+  searchInput.value = "";
+  searchBox.classList.remove("open");
+  searchBox.innerHTML = "";
+});
+
+revertBtn.addEventListener("click", function() { loadRoster(activeTeam); });
+
+saveBtn.addEventListener("click", async function() {
+  if (!roster.length && !confirm("Save an empty roster for this team?")) return;
+  saveBtn.disabled = true;
+  saveStatus.textContent = "Saving…";
+  saveStatus.className = "";
+  try {
+    const payload = {
+      team_key: activeTeam,
+      players: roster.map(function(p) {
+        return { player_id: p.player_id, selected_position: p.selected_position };
+      }),
+    };
+    const resp = await fetch("api.php?type=roster_save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || ("HTTP " + resp.status));
+    dirty = false;
+    saveStatus.textContent = "Saved (" + data.roster_snapshot_rows + " roster rows as of " + data.captured_at_utc + " UTC)";
+    saveStatus.className = "ok";
+    loadRoster(activeTeam);
+  } catch (e) {
+    saveStatus.textContent = "Save failed: " + e.message;
+    saveStatus.className = "err";
+  } finally {
+    saveBtn.disabled = false;
+  }
+});
+
+window.addEventListener("beforeunload", function(e) {
+  if (dirty) { e.preventDefault(); e.returnValue = ""; }
+});
+
+document.getElementById("team-select").addEventListener("change", function() {
+  if (dirty && !confirm("Discard unsaved changes?")) {
+    this.value = activeTeam;
+    return;
+  }
+  activeTeam = this.value;
+  if (OUR_TEAMS.indexOf(activeTeam) !== -1) setCookie("fantasy_team", activeTeam);
+  loadRoster(activeTeam);
+});
+
+fetch("api.php?type=teams")
+  .then(function(r) { return r.json(); })
+  .then(function(teams) {
+    const sel = document.getElementById("team-select");
+    const ours   = teams.filter(function(t) { return OUR_TEAMS.indexOf(t.team_key) !== -1; });
+    const others = teams.filter(function(t) { return OUR_TEAMS.indexOf(t.team_key) === -1; });
+
+    function addGroup(label, list) {
+      const g = document.createElement("optgroup");
+      g.label = label;
+      list.forEach(function(t) {
+        const o = document.createElement("option");
+        o.value = t.team_key;
+        o.textContent = t.team_name;
+        g.appendChild(o);
+      });
+      sel.appendChild(g);
+    }
+    addGroup("Our Teams", ours);
+    addGroup("Other Teams", others);
+
+    const saved = getCookie("fantasy_team");
+    if (saved && OUR_TEAMS.indexOf(saved) !== -1) activeTeam = saved;
+    sel.value = activeTeam;
+    loadRoster(activeTeam);
+  })
+  .catch(function() { loadRoster(activeTeam); });
+</script>
+</body>
+</html>

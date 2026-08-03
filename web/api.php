@@ -92,6 +92,238 @@ if ($type === 'teams') {
     exit;
 }
 
+// Valid Yahoo roster slot labels for this league, in display order.
+// Used to validate incoming roster_save payloads.
+$ROSTER_POSITIONS = ['C','1B','2B','3B','SS','OF','Util','SP','RP','P','BN','IL','IL+','NA'];
+
+if ($type === 'roster_edit') {
+    // Manual roster editor: read the current (possibly stale, since Yahoo's
+    // API has been 403ing since 2026-07-28) roster for one team.
+    $team_key = isset($_GET['team']) ? trim($_GET['team']) : '';
+    $chk = $conn->prepare("SELECT team_name FROM current_roster WHERE team_key = ? LIMIT 1");
+    $chk->bind_param('s', $team_key);
+    $chk->execute();
+    $trow = $chk->get_result()->fetch_assoc();
+    $chk->close();
+    if (!$trow) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Unknown team_key']);
+        exit;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT
+            cr.player_id                        AS player_id,
+            p.full_name                         AS full_name,
+            p.editorial_team_abbr                AS mlb_team,
+            p.display_position                   AS display_position,
+            p.position_type                      AS position_type,
+            cr.selected_position                 AS selected_position,
+            COALESCE(p.yahoo_status, '')          AS yahoo_status
+        FROM current_roster cr
+        JOIN player p ON p.player_id = cr.player_id
+        WHERE cr.team_key = ?
+        ORDER BY FIELD(cr.selected_position, 'C','1B','2B','3B','SS','OF','Util','SP','RP','P','BN','IL','IL+','NA'),
+                 p.full_name
+    ");
+    $stmt->bind_param('s', $team_key);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $players = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['player_id'] = (int)$row['player_id'];
+        $players[] = $row;
+    }
+    $stmt->close();
+    $conn->close();
+    echo json_encode([
+        'team_key'  => $team_key,
+        'team_name' => $trow['team_name'],
+        'positions' => $ROSTER_POSITIONS,
+        'players'   => $players,
+    ], JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+if ($type === 'roster_search') {
+    // Player lookup for the "add player" box in the roster editor. Searches
+    // every known player (not just current free agents) since Yahoo's own
+    // free-agent feed is unavailable during the API outage; the UI shows
+    // each hit's last-known roster/availability status so the user can judge.
+    $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+    if (mb_strlen($q) < 2) {
+        echo json_encode([]);
+        exit;
+    }
+    $stmt = $conn->prepare("
+        SELECT
+            p.player_id                          AS player_id,
+            p.full_name                          AS full_name,
+            p.editorial_team_abbr                 AS mlb_team,
+            p.display_position                    AS display_position,
+            p.position_type                       AS position_type,
+            COALESCE(p.yahoo_status, '')           AS yahoo_status,
+            cr.team_key                           AS rostered_team_key,
+            cr.team_name                          AS rostered_team_name,
+            ca.availability_status                AS avail_status
+        FROM player p
+        LEFT JOIN current_roster cr ON cr.player_id = p.player_id
+        LEFT JOIN (
+            SELECT player_id, MAX(availability_status) AS availability_status
+            FROM current_availability
+            GROUP BY player_id
+        ) ca ON ca.player_id = p.player_id
+        WHERE p.full_name LIKE CONCAT('%', ?, '%')
+        ORDER BY p.full_name
+        LIMIT 25
+    ");
+    $stmt->bind_param('s', $q);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $row['player_id'] = (int)$row['player_id'];
+        $rows[] = $row;
+    }
+    $stmt->close();
+    $conn->close();
+    echo json_encode($rows, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+if ($type === 'roster_save') {
+    // Manual roster editor save. Yahoo's roster sync normally writes a full
+    // "generation" of roster_snapshot rows (every team, one captured_at_utc)
+    // in a single run -- current_roster is a view over just the newest
+    // generation. A partial write (e.g. one team's rows only) would make
+    // every other team vanish from current_roster. So a save here clones the
+    // latest full generation, replaces the target team's slice of it with
+    // the edited roster, and re-inserts everything under a fresh
+    // captured_at_utc -- mirroring what scripts/yahoo_sync.py --all-rosters
+    // does, just with manually-entered data standing in for the Yahoo API.
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'POST required']);
+        exit;
+    }
+    $body      = json_decode(file_get_contents('php://input'), true);
+    $team_key  = isset($body['team_key']) ? trim($body['team_key']) : '';
+    $team_name = isset($body['team_name']) ? trim($body['team_name']) : '';
+    $players   = isset($body['players']) && is_array($body['players']) ? $body['players'] : null;
+
+    if ($team_key === '' || $players === null) {
+        http_response_code(400);
+        echo json_encode(['error' => 'team_key and players[] are required']);
+        exit;
+    }
+
+    $chk = $conn->prepare("SELECT team_name FROM current_roster WHERE team_key = ? LIMIT 1");
+    $chk->bind_param('s', $team_key);
+    $chk->execute();
+    $trow = $chk->get_result()->fetch_assoc();
+    $chk->close();
+    if (!$trow) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Unknown team_key']);
+        exit;
+    }
+    if ($team_name === '') $team_name = $trow['team_name'];
+
+    $player_ids = [];
+    foreach ($players as $pl) {
+        $pid = isset($pl['player_id']) ? (int)$pl['player_id'] : 0;
+        $pos = isset($pl['selected_position']) ? $pl['selected_position'] : '';
+        if ($pid <= 0 || !in_array($pos, $ROSTER_POSITIONS, true)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid player entry (player_id=' . $pid . ', selected_position=' . $pos . ')']);
+            exit;
+        }
+        $player_ids[] = $pid;
+    }
+    if (count($player_ids) !== count(array_unique($player_ids))) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Duplicate player in roster']);
+        exit;
+    }
+
+    $conn->begin_transaction();
+    try {
+        $existing = [];
+        $res = $conn->query("SELECT league_id, team_key, team_name, player_id, yahoo_player_key, selected_position FROM current_roster");
+        while ($row = $res->fetch_assoc()) $existing[] = $row;
+        if (!$existing) throw new Exception('No existing roster snapshot to clone from');
+        $league_id = $existing[0]['league_id'];
+
+        $keys = [];
+        if ($player_ids) {
+            $in    = implode(',', array_fill(0, count($player_ids), '?'));
+            $types = str_repeat('i', count($player_ids));
+            $stmt  = $conn->prepare("SELECT player_id, yahoo_player_key FROM player WHERE player_id IN ($in)");
+            $stmt->bind_param($types, ...$player_ids);
+            $stmt->execute();
+            $r = $stmt->get_result();
+            while ($row = $r->fetch_assoc()) $keys[(int)$row['player_id']] = $row['yahoo_player_key'];
+            $stmt->close();
+            foreach ($player_ids as $pid) {
+                if (!isset($keys[$pid])) throw new Exception("Unknown player_id $pid");
+            }
+        }
+
+        // Carry forward every row except: the target team's old roster
+        // (wholesale replaced below) and any player being placed onto the
+        // target team who was previously rostered elsewhere (moved, not
+        // duplicated).
+        $incoming = array_flip($player_ids);
+        $kept = [];
+        foreach ($existing as $row) {
+            if ($row['team_key'] === $team_key) continue;
+            if (isset($incoming[(int)$row['player_id']])) continue;
+            $kept[] = $row;
+        }
+        foreach ($players as $pl) {
+            $pid = (int)$pl['player_id'];
+            $kept[] = [
+                'league_id'          => $league_id,
+                'team_key'           => $team_key,
+                'team_name'          => $team_name,
+                'player_id'          => $pid,
+                'yahoo_player_key'   => $keys[$pid],
+                'selected_position'  => $pl['selected_position'],
+            ];
+        }
+
+        $now = gmdate('Y-m-d H:i:s');
+        $ins = $conn->prepare("
+            INSERT INTO roster_snapshot
+                (league_id, team_key, team_name, player_id, yahoo_player_key, selected_position, captured_at_utc)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        foreach ($kept as $row) {
+            $ins->bind_param(
+                'ississs',
+                $row['league_id'],
+                $row['team_key'],
+                $row['team_name'],
+                $row['player_id'],
+                $row['yahoo_player_key'],
+                $row['selected_position'],
+                $now
+            );
+            $ins->execute();
+        }
+        $ins->close();
+
+        $conn->commit();
+        echo json_encode(['ok' => true, 'captured_at_utc' => $now, 'roster_snapshot_rows' => count($kept)]);
+    } catch (Throwable $e) {
+        $conn->rollback();
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    $conn->close();
+    exit;
+}
+
 if ($type === 'meta') {
     $brow = $conn->query("SELECT started_at_utc FROM sync_run WHERE requested_position='B' ORDER BY sync_run_id DESC LIMIT 1")->fetch_assoc();
     $prow = $conn->query("SELECT started_at_utc FROM sync_run WHERE requested_position='P' ORDER BY sync_run_id DESC LIMIT 1")->fetch_assoc();
