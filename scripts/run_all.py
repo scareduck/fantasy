@@ -28,6 +28,17 @@ def parse_run_all_args() -> argparse.Namespace:
         metavar="NAME",
         help="Limit report recipients (default: all). E.g. --report-recipients rob helen",
     )
+    parser.add_argument(
+        "--no-yahoo",
+        action="store_true",
+        help=(
+            "Skip every step that calls the Yahoo Fantasy API (roster/player sync, "
+            "batter/pitcher season stats, pitcher game log -- the last of which "
+            "also depends on stat categories from the pitcher season stats step). "
+            "ESPN forecaster sync, MLB schedule sync, and IL analysis/reports still "
+            "run since they don't touch Yahoo."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -35,25 +46,30 @@ def main() -> int:
     run_args = parse_run_all_args()
 
     try:
-        print("=== Step 1: Yahoo sync ===")
-        args = parse_args([])
-        args.all_rosters = True
-        rc = sync_run(args)
-        if rc:
-            print(f"Yahoo sync failed (exit {rc}), aborting.", file=sys.stderr)
-            return rc
+        if run_args.no_yahoo:
+            print("=== Step 1: Yahoo sync === SKIPPED (--no-yahoo)")
+            print("=== Step 2: Batter season stats === SKIPPED (--no-yahoo)")
+            print("=== Step 3: Pitcher season stats === SKIPPED (--no-yahoo)")
+        else:
+            print("=== Step 1: Yahoo sync ===")
+            args = parse_args([])
+            args.all_rosters = True
+            rc = sync_run(args)
+            if rc:
+                print(f"Yahoo sync failed (exit {rc}), aborting.", file=sys.stderr)
+                return rc
 
-        print("\n=== Step 2: Batter season stats ===")
-        rc = batter_main([])
-        if rc:
-            print(f"Batter stats sync failed (exit {rc}), aborting.", file=sys.stderr)
-            return rc
+            print("\n=== Step 2: Batter season stats ===")
+            rc = batter_main([])
+            if rc:
+                print(f"Batter stats sync failed (exit {rc}), aborting.", file=sys.stderr)
+                return rc
 
-        print("\n=== Step 3: Pitcher season stats ===")
-        rc = pitcher_stats_run(pitcher_stats_parse_args([]))
-        if rc:
-            print(f"Pitcher stats sync failed (exit {rc}), aborting.", file=sys.stderr)
-            return rc
+            print("\n=== Step 3: Pitcher season stats ===")
+            rc = pitcher_stats_run(pitcher_stats_parse_args([]))
+            if rc:
+                print(f"Pitcher stats sync failed (exit {rc}), aborting.", file=sys.stderr)
+                return rc
 
         print("\n=== Step 4: ESPN forecaster sync ===")
         rc = espn_main([])
@@ -67,11 +83,14 @@ def main() -> int:
             print(f"MLB schedule sync failed (exit {rc}), aborting.", file=sys.stderr)
             return rc
 
-        print("\n=== Step 6: Pitcher game log sync ===")
-        rc = game_log_main([])
-        if rc:
-            print(f"Pitcher game log sync failed (exit {rc}), aborting.", file=sys.stderr)
-            return rc
+        if run_args.no_yahoo:
+            print("\n=== Step 6: Pitcher game log sync === SKIPPED (--no-yahoo)")
+        else:
+            print("\n=== Step 6: Pitcher game log sync ===")
+            rc = game_log_main([])
+            if rc:
+                print(f"Pitcher game log sync failed (exit {rc}), aborting.", file=sys.stderr)
+                return rc
 
         if run_args.daily:
             print("\n=== Steps 7-9: Skipping IL analysis and reports (--daily mode) ===")
